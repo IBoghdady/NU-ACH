@@ -89,7 +89,7 @@ export default function Home() {
       }
 
       // Order by date descending
-      query = query.order('batch_settlement_date', { ascending: false }).limit(10000)
+      query = query.order('batch_settlement_date', { ascending: false }).limit(25000)
 
       const { data: allRows, error } = await query
 
