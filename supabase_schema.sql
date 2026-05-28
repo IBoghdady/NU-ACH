@@ -25,7 +25,8 @@ create table if not exists transactions (
     transaction_isostatus_reason text,
     is_printed numeric, -- Can be 0 or 1
     isostatus_description text,
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    CONSTRAINT unique_transaction_id UNIQUE (transaction_id)
 );
 
 -- 2. Create performance indexes for high-speed searching & sorting
