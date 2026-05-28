@@ -11,7 +11,7 @@ export default async function handler(req, res) {
 
   // GET: Fetch list of beneficiaries
   if (req.method === 'GET') {
-    const { search = '', page = 1, limit = 50 } = req.query
+    const { search = '', employeeCode = '', page = 1, limit = 50 } = req.query
     const pageNum = parseInt(page, 10)
     const limitNum = parseInt(limit, 10)
     const from = (pageNum - 1) * limitNum
@@ -24,7 +24,11 @@ export default async function handler(req, res) {
 
       if (search.trim()) {
         const term = `%${search.trim()}%`
-        query = query.or(`name.ilike.${term},account_number.ilike.${term},employee_code.ilike.${term}`)
+        query = query.or(`name.ilike.${term},account_number.ilike.${term}`)
+      }
+
+      if (employeeCode.trim()) {
+        query = query.eq('employee_code', employeeCode.trim())
       }
 
       // Order alphabetically by name
