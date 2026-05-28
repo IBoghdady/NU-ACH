@@ -4,8 +4,18 @@ import styles from '../styles/Home.module.css'
 import { supabase } from '../lib/supabaseClient'
 
 export default function Home() {
-  // Navigation State
-  const [activeView, setActiveView] = useState('dashboard') // 'dashboard' | 'beneficiaries' | 'transfer'
+  // Navigation State (Active View)
+  const [activeView, setActiveView] = useState('dashboard') // 'dashboard' | 'beneficiaries'
+
+  // Clipboard Copied State
+  const [copiedKey, setCopiedKey] = useState('')
+
+  // Helper: Copy text to clipboard
+  const copyToClipboard = (text, key) => {
+    navigator.clipboard.writeText(text)
+    setCopiedKey(key)
+    setTimeout(() => setCopiedKey(''), 2000)
+  }
 
   // ----------------------------------------------------------------
   // DASHBOARD & TRANSACTION ARCHIVE DATA & FILTER STATES
@@ -68,7 +78,7 @@ export default function Home() {
     }
   }, [search])
 
-  // Export to Excel Function
+  // Export to Excel Function (All Dashboard Data)
   const handleExport = async () => {
     setIsExporting(true)
     try {
@@ -270,7 +280,7 @@ export default function Home() {
     setBenFormSuccess('')
 
     if (!newBenName.trim() || !newBenAcc.trim()) {
-      setBenFormError('Name and Account Number are strictly required.')
+      setBenFormError('Name and Account Number are required.')
       return
     }
 
@@ -325,81 +335,111 @@ export default function Home() {
     }
   }
 
-  // ----------------------------------------------------------------
-  // OUTBOUND TRANSFER STATES & ACTIONS
-  // ----------------------------------------------------------------
-  const [selectedBenForPay, setSelectedBenForPay] = useState('')
-  const [payAmount, setPayAmount] = useState('')
-  const [payBatchId, setPayBatchId] = useState('')
-  const [payPurpose, setPayPurpose] = useState('CASH')
-  const [payComment, setPayComment] = useState('')
-  
-  const [transferSuccess, setTransferSuccess] = useState('')
-  const [transferError, setTransferError] = useState('')
-  const [isSubmittingTransfer, setIsSubmittingTransfer] = useState(false)
-
-  // Pre-fill fields if navigating from Beneficiary list
-  const handleInitiatePaymentFromBen = (ben) => {
-    // Make sure we exist in the beneficiaries list, else create simple select option
-    if (!beneficiaries.some(b => b.account_number === ben.account_number)) {
-      setBeneficiaries(prev => [ben, ...prev])
-    }
-    setSelectedBenForPay(ben.account_number)
-    setSelectedBen(null) // Close drawer
-    setTransferSuccess('')
-    setTransferError('')
-    setActiveView('transfer')
-  }
-
-  const handleCreateTransfer = async (e) => {
-    e.preventDefault()
-    setTransferSuccess('')
-    setTransferError('')
-    setIsSubmittingTransfer(true)
-
-    const matchingBen = beneficiaries.find(b => b.account_number === selectedBenForPay)
-    if (!matchingBen) {
-      setTransferError('Please select a valid beneficiary.')
-      setIsSubmittingTransfer(false)
-      return
-    }
-
-    const amt = parseFloat(payAmount)
-    if (isNaN(amt) || amt <= 0) {
-      setTransferError('Amount must be a positive numeric value.')
-      setIsSubmittingTransfer(false)
-      return
-    }
-
+  // Export Specific Beneficiary's Payments Ledger
+  const handleExportForBeneficiary = async (ben) => {
+    setIsExporting(true)
     try {
-      const res = await fetch('/api/transfers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          batch_id: payBatchId,
-          transaction_amount: amt,
-          creditor_name: matchingBen.name,
-          creditor_account_number: matchingBen.account_number,
-          creditor_party_bic: matchingBen.bank_bic,
-          transaction_purpose: payPurpose,
-          comment: payComment
-        })
-      })
+      const { data: allRows, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('creditor_account_number', ben.account_number)
+        .order('batch_settlement_date', { ascending: false })
 
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.error || 'Clearing failed.')
+      if (error) throw error
+
+      if (!allRows || allRows.length === 0) {
+        alert('No past transactions found to export for this specific account.')
+        return
       }
 
-      setTransferSuccess(`ACH settled successfully! Tx ID: ${data.transaction.transaction_id}`)
-      setPayAmount('')
-      setPayBatchId('')
-      setPayComment('')
-      setSelectedBenForPay('')
+      // Convert to a premium Excel-compliant HTML spreadsheet (handles Arabic & grids perfectly)
+      let excelTemplate = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="UTF-8">
+        <!--[if gte mso 9]>
+        <xml>
+          <x:ExcelWorkbook>
+            <x:ExcelWorksheets>
+              <x:ExcelWorksheet>
+                <x:Name>NU Beneficiary Ledger</x:Name>
+                <x:WorksheetOptions>
+                  <x:DisplayGridlines/>
+                </x:WorksheetOptions>
+              </x:ExcelWorksheet>
+            </x:ExcelWorksheets>
+          </x:ExcelWorkbook>
+        </xml>
+        <![endif]-->
+        <style>
+          table { border-collapse: collapse; font-family: Arial, sans-serif; }
+          th { background-color: #4f46e5; color: #ffffff; padding: 10px; border: 1px solid #cbd5e1; }
+          td { padding: 8px; border: 1px solid #cbd5e1; }
+          .number { mso-number-format: "\#,##0\.00"; text-align: right; }
+          .text { mso-number-format: "\@"; }
+        </style>
+      </head>
+      <body>
+        <h2>Nile University Outbound Payout Ledger</h2>
+        <p><b>Beneficiary:</b> ${ben.name}</p>
+        <p><b>Account Number:</b> ${ben.account_number}</p>
+        <p><b>SWIFT Code:</b> ${ben.bank_bic || 'CIBEEGCX (Default)'}</p>
+        <br/>
+        <table>
+          <thead>
+            <tr>
+              <th>Batch ID</th>
+              <th>Settlement Date</th>
+              <th>Currency</th>
+              <th>Transaction ID</th>
+              <th>Transaction Amount (EGP)</th>
+              <th>Debtor Name</th>
+              <th>Transaction Purpose</th>
+              <th>Transaction Status</th>
+              <th>ISO Status Description</th>
+              <th>ISO Rejection Reason</th>
+              <th>Comment</th>
+            </tr>
+          </thead>
+          <tbody>`
+
+      allRows.forEach(row => {
+        excelTemplate += `
+            <tr>
+              <td class="text">${row.batch_id || ''}</td>
+              <td>${row.batch_settlement_date || ''}</td>
+              <td>${row.batch_currency || ''}</td>
+              <td class="text">${row.transaction_id || ''}</td>
+              <td class="number">${row.transaction_amount || 0}</td>
+              <td>${row.debtor_name || ''}</td>
+              <td>${row.transaction_purpose || ''}</td>
+              <td>${row.transaction_status || ''}</td>
+              <td>${row.isostatus_description || ''}</td>
+              <td>${row.transaction_isostatus_reason || ''}</td>
+              <td>${row.comment || ''}</td>
+            </tr>`
+      })
+
+      excelTemplate += `
+          </tbody>
+        </table>
+      </body>
+      </html>`
+
+      const blob = new Blob([excelTemplate], { type: 'application/vnd.ms-excel;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `NU_Ledger_${ben.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xls`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
     } catch (err) {
-      setTransferError(err.message)
+      console.error(err)
+      alert('Failed to export ledger. Please try again.')
     } finally {
-      setIsSubmittingTransfer(false)
+      setIsExporting(false)
     }
   }
 
@@ -436,13 +476,6 @@ export default function Home() {
             className={`${styles.navLink} ${activeView === 'beneficiaries' ? styles.active : ''}`}
           >
             <span>👥</span> Beneficiary Directory
-          </button>
-
-          <button 
-            onClick={() => { setActiveView('transfer'); fetchBeneficiaries(); }} 
-            className={`${styles.navLink} ${activeView === 'transfer' ? styles.active : ''}`}
-          >
-            <span>💸</span> New ACH Transfer
           </button>
         </nav>
 
@@ -797,117 +830,17 @@ export default function Home() {
 
                       <div className={styles.benActionRow} onClick={(e) => e.stopPropagation()}>
                         <button 
-                          className={styles.benBtn}
-                          onClick={() => handleViewBeneficiaryDetails(ben)}
-                        >
-                          View History
-                        </button>
-                        <button 
                           className={styles.benPayBtn}
-                          onClick={() => handleInitiatePaymentFromBen(ben)}
+                          onClick={() => handleViewBeneficiaryDetails(ben)}
+                          style={{ flex: '1', width: '100%' }}
                         >
-                          Send Payout
+                          View Profile & History
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-            </>
-          )}
-
-          {/* 3. NEW OUTBOUND TRANSFER VIEW */}
-          {activeView === 'transfer' && (
-            <>
-              <header className={styles.header}>
-                <div className={styles.titleGroup}>
-                  <h1>New ACH Transfer</h1>
-                  <p className={styles.subtitle}>Initiate and settle standard EGP outward clearing instructions</p>
-                </div>
-              </header>
-
-              <div className={styles.formCard}>
-                <h3 style={{ marginBottom: '1.5rem', fontWeight: '700' }}>Initiate Outbound ACH Payment</h3>
-                
-                {transferError && <div className={styles.errorBanner}>⚠️ {transferError}</div>}
-                {transferSuccess && <div className={styles.successBanner}>🛡️ {transferSuccess}</div>}
-
-                <form onSubmit={handleCreateTransfer}>
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>Select Beneficiary / Recipient</label>
-                    <select 
-                      value={selectedBenForPay} 
-                      onChange={(e) => setSelectedBenForPay(e.target.value)} 
-                      className={styles.selectInput}
-                      required
-                    >
-                      <option value="">-- Choose recipient account --</option>
-                      {beneficiaries.map((b) => (
-                        <option key={b.id} value={b.account_number}>
-                          {b.name} ({b.account_number.slice(0, 4)}...{b.account_number.slice(-4)})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>Transfer Amount (EGP)</label>
-                    <input 
-                      type="number" 
-                      step="0.01"
-                      min="0.01"
-                      value={payAmount} 
-                      onChange={(e) => setPayAmount(e.target.value)}
-                      className={styles.inputField}
-                      placeholder="0.00"
-                      required
-                    />
-                  </div>
-
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>Custom Batch ID (Optional)</label>
-                    <input 
-                      type="text" 
-                      value={payBatchId} 
-                      onChange={(e) => setPayBatchId(e.target.value)}
-                      className={styles.inputField}
-                      placeholder="Leave blank to auto-generate CIB code..."
-                    />
-                  </div>
-
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>Purpose Code</label>
-                    <select 
-                      value={payPurpose} 
-                      onChange={(e) => setPayPurpose(e.target.value)}
-                      className={styles.selectInput}
-                    >
-                      <option value="CASH">CASH (Standard Outward Payout)</option>
-                      <option value="SALA">SALA (Salary Payment)</option>
-                      <option value="SUPP">SUPP (Supplier Payment)</option>
-                      <option value="REFD">REFD (Refund / Disbursement)</option>
-                    </select>
-                  </div>
-
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>Internal Comment / Memo</label>
-                    <textarea 
-                      value={payComment} 
-                      onChange={(e) => setPayComment(e.target.value)}
-                      className={styles.textareaField}
-                      placeholder="Purpose description for ledger audits..."
-                    />
-                  </div>
-
-                  <button 
-                    type="submit" 
-                    className={styles.submitBtn}
-                    disabled={isSubmittingTransfer}
-                  >
-                    {isSubmittingTransfer ? '⏳ Settle clearing queue...' : '🔐 Confirm & Issue Transfer'}
-                  </button>
-                </form>
-              </div>
             </>
           )}
 
@@ -921,7 +854,7 @@ export default function Home() {
             
             <div className={styles.drawerHeader}>
               <div>
-                <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: 'white' }}>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'white', lineHeight: '1.4' }}>
                   {selectedBen.name}
                 </h2>
                 <span className={styles.benCategory}>{selectedBen.category || 'Operational'}</span>
@@ -931,20 +864,38 @@ export default function Home() {
 
             <div className={styles.drawerMeta}>
               <div className={styles.benLabel}>Clearing Account</div>
-              <div className={styles.benValue} style={{ fontSize: '1rem', color: '#6366f1' }}>
-                {selectedBen.account_number}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <span className={styles.benValue} style={{ fontSize: '1rem', color: '#6366f1', marginBottom: 0, fontFamily: 'monospace' }}>
+                  {selectedBen.account_number}
+                </span>
+                <button 
+                  onClick={() => copyToClipboard(selectedBen.account_number, 'account')}
+                  className={styles.copyBtn}
+                >
+                  {copiedKey === 'account' ? '✓ Copied' : '📋 Copy'}
+                </button>
               </div>
-              <div className={styles.benLabel}>Bank Routing / BIC</div>
-              <div className={styles.benValue} style={{ marginBottom: '1.25rem' }}>
-                {selectedBen.bank_bic || 'CIBEEGCX (Default)'}
+
+              <div className={styles.benLabel}>Bank Routing / BIC / SWIFT</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem' }}>
+                <span className={styles.benValue} style={{ marginBottom: 0, fontFamily: 'monospace' }}>
+                  {selectedBen.bank_bic || 'CIBEEGCX'}
+                </span>
+                <button 
+                  onClick={() => copyToClipboard(selectedBen.bank_bic || 'CIBEEGCX', 'bic')}
+                  className={styles.copyBtn}
+                >
+                  {copiedKey === 'bic' ? '✓ Copied' : '📋 Copy'}
+                </button>
               </div>
               
               <button 
-                onClick={() => handleInitiatePaymentFromBen(selectedBen)}
+                onClick={() => handleExportForBeneficiary(selectedBen)}
                 className={styles.submitBtn}
-                style={{ marginTop: '0.5rem' }}
+                style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                disabled={isExporting}
               >
-                💸 Send New Payout
+                📥 {isExporting ? 'Exporting Ledger...' : 'Export Payout Ledger to Excel'}
               </button>
             </div>
 
