@@ -862,6 +862,12 @@ export default function Home() {
                       <div className={styles.benDetails}>
                         <div className={styles.benLabel}>Account Number</div>
                         <div className={styles.benValue}>{ben.account_number || 'N/A'}</div>
+                        {ben.employee_code && (
+                          <>
+                            <div className={styles.benLabel}>Employee Code</div>
+                            <div className={styles.benValue} style={{ color: '#6366f1', fontWeight: '700' }}>#{ben.employee_code}</div>
+                          </>
+                        )}
                         <div className={styles.benLabel}>BIC / Routing</div>
                         <div className={styles.benValue} style={{ marginBottom: '0' }}>
                           {ben.bank_bic || 'CIBEEGCX (Default)'}
@@ -935,6 +941,23 @@ export default function Home() {
                   {copiedKey === 'account' ? '✓ Copied' : '📋 Copy'}
                 </button>
               </div>
+
+              {selectedBen.employee_code && (
+                <>
+                  <div className={styles.benLabel}>Employee Code</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                    <span className={styles.benValue} style={{ fontSize: '1rem', color: '#6366f1', marginBottom: 0, fontWeight: '700' }}>
+                      #{selectedBen.employee_code}
+                    </span>
+                    <button 
+                      onClick={() => copyToClipboard(selectedBen.employee_code, 'empcode')}
+                      className={styles.copyBtn}
+                    >
+                      {copiedKey === 'empcode' ? '✓ Copied' : '📋 Copy'}
+                    </button>
+                  </div>
+                </>
+              )}
 
               <div className={styles.benLabel}>Bank Routing / BIC / SWIFT</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem' }}>
