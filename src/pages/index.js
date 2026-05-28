@@ -6,6 +6,43 @@ import { supabase } from '../lib/supabaseClient'
 import TransactionReceipt from '../components/TransactionReceipt'
 
 export default function Home() {
+  // Authentication State
+  const [session, setSession] = useState(null)
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authError, setAuthError] = useState(null)
+  const [isAuthLoading, setIsAuthLoading] = useState(false)
+  const [isInitialCheck, setIsInitialCheck] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      setIsInitialCheck(false)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    setIsAuthLoading(true)
+    setAuthError(null)
+    const { error } = await supabase.auth.signInWithPassword({
+      email: authEmail,
+      password: authPassword,
+    })
+    if (error) setAuthError(error.message)
+    setIsAuthLoading(false)
+  }
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+  }
+
   // Navigation State (Active View)
   const [activeView, setActiveView] = useState('dashboard') // 'dashboard' | 'beneficiaries'
 
@@ -497,6 +534,44 @@ export default function Home() {
   const formatEGP = (val) => {
     return new Intl.NumberFormat('en-EG', { style: 'currency', currency: 'EGP' }).format(val)
   }
+  if (isInitialCheck) {
+    return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a', color: 'white', fontFamily: 'Inter, sans-serif' }}>Establishing secure connection...</div>
+  }
+
+  if (!session) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a', fontFamily: 'Inter, sans-serif' }}>
+        <Head>
+          <title>Login - Nile Treasury</title>
+        </Head>
+        <div style={{ background: '#1e293b', padding: '40px', borderRadius: '12px', width: '400px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', border: '1px solid #334155' }}>
+          <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+            <span style={{ fontSize: '40px' }}>🏛️</span>
+            <h1 style={{ color: 'white', fontSize: '24px', margin: '15px 0 5px 0' }}>Nile Treasury</h1>
+            <p style={{ color: '#94a3b8', margin: 0, fontSize: '14px' }}>Authorized Personnel Only</p>
+          </div>
+          {authError && (
+            <div style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px', borderRadius: '6px', fontSize: '13px', marginBottom: '20px', border: '1px solid rgba(239,68,68,0.2)' }}>
+              {authError}
+            </div>
+          )}
+          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <div>
+              <label style={{ display: 'block', color: '#cbd5e1', fontSize: '13px', marginBottom: '6px' }}>Email Address</label>
+              <input type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} required style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: 'white', boxSizing: 'border-box' }} placeholder="admin@nu.edu.eg" />
+            </div>
+            <div>
+              <label style={{ display: 'block', color: '#cbd5e1', fontSize: '13px', marginBottom: '6px' }}>Password</label>
+              <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} required style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: 'white', boxSizing: 'border-box' }} placeholder="••••••••" />
+            </div>
+            <button type="submit" disabled={isAuthLoading} style={{ marginTop: '10px', background: '#3b82f6', color: 'white', border: 'none', padding: '12px', borderRadius: '6px', cursor: isAuthLoading ? 'wait' : 'pointer', fontWeight: 'bold', fontSize: '14px', transition: 'background 0.2s' }}>
+              {isAuthLoading ? 'Authenticating...' : 'Secure Sign In'}
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={styles.appLayout}>
@@ -541,6 +616,16 @@ export default function Home() {
           >
             <span>📤</span> Bulk Import
           </button>
+          
+          <div style={{ marginTop: 'auto' }}>
+            <button 
+              onClick={handleLogout} 
+              className={styles.navLink}
+              style={{ color: '#ef4444', width: '100%', textAlign: 'left', marginTop: '20px' }}
+            >
+              <span>🔒</span> Secure Sign Out
+            </button>
+          </div>
         </nav>
 
         <div className={styles.sidebarFooter}>
