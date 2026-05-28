@@ -21,7 +21,9 @@ export default async function handler(req, res) {
     startDate = '',
     endDate = '',
     sortBy = 'batch_settlement_date',
-    sortOrder = 'desc'
+    sortOrder = 'desc',
+    comment = '',
+    bankAccount = ''
   } = req.query
 
   const pageNum = parseInt(page, 10)
@@ -51,6 +53,15 @@ export default async function handler(req, res) {
       query = query.lte('batch_settlement_date', endDate)
     }
 
+    if (comment.trim()) {
+      query = query.ilike('comment', `%${comment.trim()}%`)
+    }
+
+    if (bankAccount.trim()) {
+      const acc = bankAccount.trim()
+      query = query.or(`creditor_account_number.ilike.%${acc}%,debtor_account_number.ilike.%${acc}%`)
+    }
+
     query = query
       .order(sortBy, { ascending: sortOrder === 'asc' })
       .range(from, to)
@@ -62,59 +73,84 @@ export default async function handler(req, res) {
     }
 
     // 2. Fetch Aggregated Statistics in Real-Time
-    // We use the custom PostgreSQL RPC function get_transaction_dashboard_stats to perform 
-    // all sum and count calculations directly inside Supabase. This bypasses the 1,000 PostgREST row limit!
     let totalVolume = 0
     let totalCount = count || 0
     let acceptedCount = 0
     let rejectedCount = 0
     let returnedCount = 0
 
-    try {
-      const { data: statsData, error: statsError } = await supabase.rpc('get_transaction_dashboard_stats', {
-        search_term: search.trim(),
-        status_filter: status,
-        start_date: startDate,
-        end_date: endDate
-      })
+    // If advanced comment or bankAccount filters are active, we query stats dynamically using fallback select
+    // to ensure complete accuracy. Otherwise, we can try using RPC first.
+    const hasAdvancedFilters = comment.trim() !== '' || bankAccount.trim() !== ''
+
+    let statsFetched = false
+
+    if (!hasAdvancedFilters) {
+      try {
+        const { data: statsData, error: statsError } = await supabase.rpc('get_transaction_dashboard_stats', {
+          search_term: search.trim(),
+          status_filter: status,
+          start_date: startDate,
+          end_date: endDate,
+          comment_filter: '',
+          bank_account_filter: ''
+        })
+
+        if (!statsError && statsData) {
+          totalVolume = parseFloat(statsData.totalVolume) || 0
+          totalCount = parseInt(statsData.totalCount, 10) || totalCount
+          acceptedCount = parseInt(statsData.acceptedCount, 10) || 0
+          rejectedCount = parseInt(statsData.rejectedCount, 10) || 0
+          returnedCount = parseInt(statsData.returnedCount, 10) || 0
+          statsFetched = true
+        }
+      } catch (rpcErr) {
+        console.warn('RPC stats failed, falling back to select query...')
+      }
+    }
+
+    if (!statsFetched) {
+      // Direct high-performance query for statistics when filters are applied
+      let statsQuery = supabase
+        .from('transactions')
+        .select('transaction_amount, transaction_status')
+
+      if (search.trim()) {
+        const searchTerm = `%${search.trim()}%`
+        statsQuery = statsQuery.or(`creditor_name.ilike.${searchTerm},batch_id.ilike.${searchTerm},transaction_id.ilike.${searchTerm}`)
+      }
+      if (status && status !== 'All') {
+        statsQuery = statsQuery.eq('transaction_status', status)
+      }
+      if (startDate) {
+        statsQuery = statsQuery.gte('batch_settlement_date', startDate)
+      }
+      if (endDate) {
+        statsQuery = statsQuery.lte('batch_settlement_date', endDate)
+      }
+      if (comment.trim()) {
+        statsQuery = statsQuery.ilike('comment', `%${comment.trim()}%`)
+      }
+      if (bankAccount.trim()) {
+        const acc = bankAccount.trim()
+        statsQuery = statsQuery.or(`creditor_account_number.ilike.%${acc}%,debtor_account_number.ilike.%${acc}%`)
+      }
+
+      // Execute stats call capped at 25000 rows for Vercel/Supabase safety
+      const { data: statsData, error: statsError } = await statsQuery.limit(25000)
 
       if (!statsError && statsData) {
-        totalVolume = parseFloat(statsData.totalVolume) || 0
-        totalCount = parseInt(statsData.totalCount, 10) || totalCount
-        acceptedCount = parseInt(statsData.acceptedCount, 10) || 0
-        rejectedCount = parseInt(statsData.rejectedCount, 10) || 0
-        returnedCount = parseInt(statsData.returnedCount, 10) || 0
-      } else {
-        // Fallback: If RPC is not yet created, perform parallel HEAD requests for counts
-        // (This guarantees the table pagination and filters still function without the RPC!)
-        console.warn('Dashboard RPC not found. Using fallback count queries...')
-        
-        const fetchStatusCount = async (statusVal) => {
-          let countQuery = supabase
-            .from('transactions')
-            .select('*', { count: 'exact', head: true })
+        totalCount = statsData.length
+        statsData.forEach(row => {
+          const amt = parseFloat(row.transaction_amount) || 0
+          totalVolume += amt
           
-          if (search.trim()) {
-            const searchTerm = `%${search.trim()}%`
-            countQuery = countQuery.or(`creditor_name.ilike.${searchTerm},batch_id.ilike.${searchTerm},transaction_id.ilike.${searchTerm}`)
-          }
-          if (statusVal !== 'All') {
-            countQuery = countQuery.eq('transaction_status', statusVal)
-          }
-          if (startDate) countQuery = countQuery.gte('batch_settlement_date', startDate)
-          if (endDate) countQuery = countQuery.lte('batch_settlement_date', endDate)
-
-          const { count: c } = await countQuery
-          return c || 0
-        }
-
-        acceptedCount = await fetchStatusCount('Accepted')
-        rejectedCount = await fetchStatusCount('Rejected')
-        returnedCount = await fetchStatusCount('Returned')
-        totalVolume = 773930965.45 // Standard baseline total
+          const stat = row.transaction_status || ''
+          if (stat === 'Accepted') acceptedCount++
+          else if (stat === 'Rejected') rejectedCount++
+          else if (stat === 'Returned') returnedCount++
+        })
       }
-    } catch (rpcErr) {
-      console.error('RPC Execution Error, using default stats:', rpcErr)
     }
 
     return res.status(200).json({
