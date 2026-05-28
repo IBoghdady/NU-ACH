@@ -4,6 +4,7 @@ import Script from 'next/script'
 import styles from '../styles/Home.module.css'
 import { supabase } from '../lib/supabaseClient'
 import TransactionReceipt from '../components/TransactionReceipt'
+import * as XLSX from 'xlsx'
 
 export default function Home() {
   // Authentication State
@@ -79,6 +80,75 @@ export default function Home() {
         })
       }
     }, 500)
+  }
+
+  // ----------------------------------------------------------------
+  // BULK PAYOUT GENERATOR STATE & LOGIC
+  // ----------------------------------------------------------------
+  const [payoutFile, setPayoutFile] = useState(null)
+  const [payoutPreview, setPayoutPreview] = useState([])
+  const [isPayoutProcessing, setIsPayoutProcessing] = useState(false)
+  const [payoutStats, setPayoutStats] = useState(null)
+
+  const handlePayoutFileUpload = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setPayoutFile(file)
+    setIsPayoutProcessing(true)
+
+    const reader = new FileReader()
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target.result
+        const wb = XLSX.read(bstr, { type: 'binary' })
+        const wsname = wb.SheetNames[0]
+        const ws = wb.Sheets[wsname]
+        const data = XLSX.utils.sheet_to_json(ws)
+        
+        // Map common column variations
+        const mappedData = data.map(row => ({
+          employeeId: row['Employee ID'] || row['EmployeeID'] || row['EMP ID'] || row['Employee Code'] || '',
+          amount: row['Amount'] || row['TransactionAmount'] || 0,
+          comment: row['Comment'] || row['Comments'] || row['Description'] || ''
+        }))
+
+        // Call API
+        const res = await fetch('/api/generate_payouts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows: mappedData })
+        })
+        const result = await res.json()
+        
+        if (result.success) {
+          setPayoutPreview(result.data)
+          setPayoutStats(result.stats)
+        } else {
+          alert('Error processing file: ' + result.error)
+        }
+      } catch (err) {
+        console.error(err)
+        alert('Error parsing file. Please ensure it is a valid Excel or CSV file.')
+      } finally {
+        setIsPayoutProcessing(false)
+      }
+    }
+    reader.readAsBinaryString(file)
+  }
+
+  const exportPayoutToExcel = () => {
+    if (!payoutPreview.length) return
+    
+    // Remove internal fields used for UI state
+    const exportData = payoutPreview.map(row => {
+      const { _id, _status, _originalEmployeeId, ...rest } = row
+      return rest
+    })
+    
+    const ws = XLSX.utils.json_to_sheet(exportData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "ACH Payouts")
+    XLSX.writeFile(wb, `ACH_Payout_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
   // Helper: Copy text to clipboard
@@ -614,7 +684,14 @@ export default function Home() {
             onClick={() => setActiveView('import')} 
             className={`${styles.navLink} ${activeView === 'import' ? styles.active : ''}`}
           >
-            <span>📤</span> Bulk Import
+            <span>📥</span> Database Upload
+          </button>
+
+          <button 
+            onClick={() => setActiveView('payouts')} 
+            className={`${styles.navLink} ${activeView === 'payouts' ? styles.active : ''}`}
+          >
+            <span>📤</span> Bulk Payouts
           </button>
           
           <div style={{ marginTop: 'auto' }}>
@@ -1212,8 +1289,128 @@ export default function Home() {
 
           </div>
         </div>
-      )}
+        )}
+        {/* ---------------------------------------------------------------- */}
+        {/* BULK PAYOUTS VIEW */}
+        {/* ---------------------------------------------------------------- */}
+        {activeView === 'payouts' && (
+          <div className={styles.dashboardContainer} style={{ animation: 'fadeIn 0.3s ease-out' }}>
+            <div className={styles.header}>
+              <div>
+                <h1 className={styles.title}>Bulk Payout Generator</h1>
+                <p className={styles.subtitle}>Upload simple payroll sheets to instantly generate fully compliant ACH forms.</p>
+              </div>
+            </div>
 
+            <div className={styles.filtersSection} style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', gap: '20px', width: '100%', alignItems: 'center' }}>
+                <div style={{ flex: 1 }}>
+                  <label className={styles.filterLabel}>1. Upload Simplified Data (.xlsx or .csv)</label>
+                  <input 
+                    type="file" 
+                    accept=".xlsx, .xls, .csv" 
+                    onChange={handlePayoutFileUpload}
+                    style={{ 
+                      padding: '10px', 
+                      background: 'rgba(255,255,255,0.05)', 
+                      border: '1px dashed rgba(255,255,255,0.2)', 
+                      borderRadius: '8px',
+                      color: 'var(--text-secondary)',
+                      width: '100%',
+                      cursor: 'pointer'
+                    }} 
+                  />
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '8px' }}>
+                    Required Columns: <strong>Employee ID</strong>, <strong>Amount</strong>, <strong>Comment</strong>
+                  </div>
+                </div>
+
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {isPayoutProcessing && <div style={{ color: 'var(--primary)', fontWeight: 'bold' }}>⏳ Processing Database Match...</div>}
+                  {!isPayoutProcessing && payoutStats && (
+                    <div style={{ display: 'flex', gap: '20px' }}>
+                      <div className={styles.kpiCard} style={{ padding: '15px' }}>
+                        <div className={styles.kpiLabel}>Total Rows</div>
+                        <div className={styles.kpiValue} style={{ fontSize: '1.2rem' }}>{payoutStats.total}</div>
+                      </div>
+                      <div className={styles.kpiCard} style={{ padding: '15px', borderBottom: '3px solid #10b981' }}>
+                        <div className={styles.kpiLabel}>Matched Beneficiaries</div>
+                        <div className={styles.kpiValue} style={{ fontSize: '1.2rem', color: '#10b981' }}>{payoutStats.matched}</div>
+                      </div>
+                      <div className={styles.kpiCard} style={{ padding: '15px', borderBottom: payoutStats.missing > 0 ? '3px solid #ef4444' : '3px solid #334155' }}>
+                        <div className={styles.kpiLabel}>Missing Details</div>
+                        <div className={styles.kpiValue} style={{ fontSize: '1.2rem', color: payoutStats.missing > 0 ? '#ef4444' : 'white' }}>{payoutStats.missing}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ flex: 0 }}>
+                  <button 
+                    onClick={exportPayoutToExcel}
+                    disabled={!payoutPreview.length}
+                    style={{
+                      background: payoutPreview.length ? 'var(--primary)' : '#334155',
+                      color: 'white',
+                      border: 'none',
+                      padding: '12px 24px',
+                      borderRadius: '8px',
+                      cursor: payoutPreview.length ? 'pointer' : 'not-allowed',
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '1rem',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <span>💾</span> Export ACH Form
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* PREVIEW TABLE */}
+            {payoutPreview.length > 0 && (
+              <div className={styles.tableWrapper} style={{ marginTop: '20px' }}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th className={styles.th}>Row</th>
+                      <th className={styles.th}>Employee ID</th>
+                      <th className={styles.th}>Creditor Name</th>
+                      <th className={styles.th}>Account Number</th>
+                      <th className={styles.th}>Bank Name</th>
+                      <th className={styles.th}>Amount</th>
+                      <th className={styles.th}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payoutPreview.map((row) => (
+                      <tr key={row._id} className={styles.tr}>
+                        <td className={styles.td} style={{ color: 'var(--text-secondary)' }}>{row._id}</td>
+                        <td className={styles.td} style={{ fontFamily: 'monospace' }}>{row._originalEmployeeId}</td>
+                        <td className={styles.td} style={{ fontWeight: '500' }}>{row.CreditorName || '-'}</td>
+                        <td className={styles.td} style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{row.CreditorAccountNumber || '-'}</td>
+                        <td className={styles.td} style={{ color: 'var(--text-secondary)' }}>{row.CreditorBank || '-'}</td>
+                        <td className={`${styles.td} ${styles.amount}`}>{formatEGP(row.TransactionAmount)}</td>
+                        <td className={styles.td}>
+                          {row._status === 'Matched' ? (
+                            <span className={`${styles.statusBadge} ${styles.statusAccepted}`}>Matched</span>
+                          ) : (
+                            <span className={`${styles.statusBadge} ${styles.statusRejected}`}>Missing Details</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+      </main>
     </div>
   )
 }
