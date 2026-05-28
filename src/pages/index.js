@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Head from 'next/head'
+import Script from 'next/script'
 import styles from '../styles/Home.module.css'
 import { supabase } from '../lib/supabaseClient'
+import TransactionReceipt from '../components/TransactionReceipt'
 
 export default function Home() {
   // Navigation State (Active View)
@@ -9,6 +11,38 @@ export default function Home() {
 
   // Clipboard Copied State
   const [copiedKey, setCopiedKey] = useState('')
+
+  // Receipt Generator State
+  const receiptRef = useRef(null)
+  const [receiptTx, setReceiptTx] = useState(null)
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false)
+
+  const handleGeneratePDF = (tx) => {
+    if (typeof window === 'undefined' || !window.html2pdf) {
+      alert('PDF Engine is still loading, please wait a moment.')
+      return
+    }
+    setReceiptTx(tx)
+    setIsGeneratingPDF(true)
+    
+    // Give React a moment to render the hidden receipt with the correct transaction data
+    setTimeout(() => {
+      const element = receiptRef.current
+      if (element) {
+        const opt = {
+          margin: 0,
+          filename: `Advice_Report_${tx.transaction_id || 'receipt'}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+        }
+        window.html2pdf().set(opt).from(element).save().then(() => {
+          setIsGeneratingPDF(false)
+          setReceiptTx(null)
+        })
+      }
+    }, 500)
+  }
 
   // Helper: Copy text to clipboard
   const copyToClipboard = (text, key) => {
@@ -468,6 +502,13 @@ export default function Home() {
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
+      <Script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" strategy="lazyOnload" />
+
+      {/* Hidden Receipt Component for PDF generation */}
+      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+        <TransactionReceipt transaction={receiptTx} ref={receiptRef} />
+      </div>
+
       {/* 🏛️ PREMIUM SIDEBAR NAVIGATION */}
       <aside className={styles.sidebar}>
         <div className={styles.sidebarHeader}>
@@ -671,6 +712,7 @@ export default function Home() {
                             <th className={styles.th}>Status</th>
                             <th className={styles.th}>Comment</th>
                             <th className={styles.th} style={{ textAlign: 'right' }}>Amount</th>
+                            <th className={styles.th} style={{ textAlign: 'center' }}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -700,6 +742,31 @@ export default function Home() {
                               </td>
                               <td className={`${styles.td} ${styles.amount}`}>
                                 {formatEGP(tx.transaction_amount)}
+                              </td>
+                              <td className={styles.td} style={{ textAlign: 'center' }}>
+                                <button 
+                                  onClick={() => handleGeneratePDF(tx)}
+                                  style={{
+                                    background: 'rgba(99, 102, 241, 0.15)',
+                                    border: '1px solid rgba(99, 102, 241, 0.3)',
+                                    color: '#818cf8',
+                                    borderRadius: '6px',
+                                    padding: '4px 8px',
+                                    cursor: isGeneratingPDF ? 'wait' : 'pointer',
+                                    fontSize: '0.8rem',
+                                    transition: 'all 0.2s',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '5px',
+                                    width: '100%'
+                                  }}
+                                  disabled={isGeneratingPDF}
+                                  title="Download Advice Report PDF"
+                                >
+                                  {isGeneratingPDF && receiptTx?.id === tx.id ? '⏳' : '📄'}
+                                  PDF
+                                </button>
                               </td>
                             </tr>
                           ))}
