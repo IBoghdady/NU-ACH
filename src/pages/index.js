@@ -1139,7 +1139,6 @@ export default function Home() {
           )}
 
         </div>
-      </main>
 
       {/* 3. BULK IMPORT VIEW */}
           {activeView === 'import' && (
