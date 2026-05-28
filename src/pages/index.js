@@ -23,7 +23,6 @@ export default function Home() {
   const [search, setSearch] = useState('')
   const [commentFilter, setCommentFilter] = useState('')
   const [bankAccountFilter, setBankAccountFilter] = useState('')
-  const [employeeCodeFilter, setEmployeeCodeFilter] = useState('')
   const [status, setStatus] = useState('All')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -46,7 +45,6 @@ export default function Home() {
         search: search,
         comment: commentFilter,
         bankAccount: bankAccountFilter,
-        employeeCode: employeeCodeFilter,
         status: status,
         startDate: startDate,
         endDate: endDate
@@ -82,7 +80,7 @@ export default function Home() {
       }, 400)
       return () => clearTimeout(delayDebounce)
     }
-  }, [search, commentFilter, bankAccountFilter, employeeCodeFilter])
+  }, [search, commentFilter, bankAccountFilter])
 
   // Export to Excel Function (All Dashboard Data)
   const handleExport = async () => {
@@ -607,18 +605,6 @@ export default function Home() {
                   />
                 </div>
 
-                <div className={styles.searchWrapper}>
-                  <span className={styles.searchIcon}>👤</span>
-                  <input 
-                    type="text" 
-                    placeholder="Employee Code..." 
-                    value={employeeCodeFilter}
-                    onChange={(e) => setEmployeeCodeFilter(e.target.value)}
-                    className={styles.searchInput}
-                    style={{ width: '130px' }}
-                  />
-                </div>
-
                 <div>
                   <select 
                     value={status} 
@@ -678,7 +664,6 @@ export default function Home() {
                         <thead>
                           <tr>
                             <th className={styles.th}>Date</th>
-                            <th className={styles.th}>Emp Code</th>
                             <th className={styles.th}>Creditor Name</th>
                             <th className={styles.th}>Creditor Account</th>
                             <th className={styles.th}>Transaction ID</th>
@@ -691,9 +676,6 @@ export default function Home() {
                             <tr key={tx.id} className={styles.tr}>
                               <td className={styles.td}>
                                 {tx.batch_settlement_date ? new Date(tx.batch_settlement_date).toLocaleDateString('en-EG', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
-                              </td>
-                              <td className={styles.td} style={{ color: '#6366f1', fontWeight: '700' }}>
-                                {tx.employee_code ? `#${tx.employee_code}` : '-'}
                               </td>
                               <td className={styles.td} style={{ fontWeight: '500' }}>{tx.creditor_name || 'N/A'}</td>
                               <td className={styles.td} style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
