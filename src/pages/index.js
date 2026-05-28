@@ -669,6 +669,7 @@ export default function Home() {
                             <th className={styles.th}>Creditor Account</th>
                             <th className={styles.th}>Transaction ID</th>
                             <th className={styles.th}>Status</th>
+                            <th className={styles.th}>Comment</th>
                             <th className={styles.th} style={{ textAlign: 'right' }}>Amount</th>
                           </tr>
                         </thead>
@@ -693,6 +694,9 @@ export default function Home() {
                                 }`}>
                                   {tx.transaction_status || 'N/A'}
                                 </span>
+                              </td>
+                              <td className={styles.td} style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                {tx.comment || '-'}
                               </td>
                               <td className={`${styles.td} ${styles.amount}`}>
                                 {formatEGP(tx.transaction_amount)}
