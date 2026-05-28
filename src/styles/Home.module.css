@@ -899,3 +899,129 @@
   color: white;
   border-color: rgba(255, 255, 255, 0.25);
 }
+
+/* ---------------------------------------------------- */
+/* IMPORT AREA STYLING                                  */
+/* ---------------------------------------------------- */
+.dropZone {
+  border: 2px dashed rgba(99, 102, 241, 0.4);
+  background: rgba(99, 102, 241, 0.02);
+  border-radius: 20px;
+  padding: 3.5rem 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.dropZone:hover, .dropZoneActive {
+  border-color: var(--accent-color);
+  background: rgba(59, 130, 246, 0.05);
+  box-shadow: 0 0 25px rgba(59, 130, 246, 0.1);
+  transform: translateY(-2px);
+}
+
+.dropZoneIcon {
+  font-size: 3.5rem;
+  margin-bottom: 0.5rem;
+  animation: pulse 2s infinite;
+}
+
+.dropZoneTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: white;
+}
+
+.dropZoneText {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  max-width: 400px;
+  line-height: 1.6;
+}
+
+.importSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.summaryItem {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  padding: 1.25rem;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.summaryLabel {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.summaryValue {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: white;
+}
+
+.progressBarContainer {
+  width: 100%;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 9999px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  margin: 1.5rem 0;
+  position: relative;
+}
+
+.progressBarFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-color) 0%, #10b981 100%);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+.previewHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 2rem 0 1rem 0;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.badgeGreen {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success-color);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.badgeYellow {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning-color);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
