@@ -824,7 +824,7 @@ export default function Home() {
                   <span className={styles.searchIcon}>🔍</span>
                   <input 
                     type="text" 
-                    placeholder="Search Beneficiary Directory by name or account..." 
+                    placeholder="Search Beneficiary Directory by name, account, or Employee ID..." 
                     value={benSearch}
                     onChange={(e) => setBenSearch(e.target.value)}
                     className={styles.searchInput}
