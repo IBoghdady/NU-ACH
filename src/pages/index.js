@@ -103,6 +103,7 @@ export default function Home() {
     if (activeView === 'dashboard') {
       fetchDashboardData()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, status, startDate, endDate, activeView])
 
   // Debounced search trigger for Dashboard
@@ -114,7 +115,8 @@ export default function Home() {
       }, 400)
       return () => clearTimeout(delayDebounce)
     }
-  }, [search, commentFilter, bankAccountFilter])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, commentFilter, bankAccountFilter, activeView])
 
   // Export to Excel Function (All Dashboard Data)
   const handleExport = async () => {
@@ -307,6 +309,7 @@ export default function Home() {
     if (activeView === 'beneficiaries') {
       fetchBeneficiaries()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView])
 
   // Debounced search for Beneficiaries
@@ -317,7 +320,8 @@ export default function Home() {
       }, 350)
       return () => clearTimeout(delayDebounce)
     }
-  }, [benSearch, benEmployeeCodeSearch])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [benSearch, benEmployeeCodeSearch, activeView])
 
   // Handle adding new Beneficiary
   const handleAddBeneficiary = async (e) => {
