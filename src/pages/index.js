@@ -21,6 +21,8 @@ export default function Home() {
   // DASHBOARD & TRANSACTION ARCHIVE DATA & FILTER STATES
   // ----------------------------------------------------------------
   const [search, setSearch] = useState('')
+  const [commentFilter, setCommentFilter] = useState('')
+  const [bankAccountFilter, setBankAccountFilter] = useState('')
   const [status, setStatus] = useState('All')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -41,6 +43,8 @@ export default function Home() {
         page: page.toString(),
         limit: '25',
         search: search,
+        comment: commentFilter,
+        bankAccount: bankAccountFilter,
         status: status,
         startDate: startDate,
         endDate: endDate
@@ -76,7 +80,7 @@ export default function Home() {
       }, 400)
       return () => clearTimeout(delayDebounce)
     }
-  }, [search])
+  }, [search, commentFilter, bankAccountFilter])
 
   // Export to Excel Function (All Dashboard Data)
   const handleExport = async () => {
@@ -93,6 +97,13 @@ export default function Home() {
         if (search.trim()) {
           const term = `%${search.trim()}%`
           query = query.or(`creditor_name.ilike.${term},batch_id.ilike.${term},transaction_id.ilike.${term}`)
+        }
+        if (commentFilter.trim()) {
+          query = query.ilike('comment', `%${commentFilter.trim()}%`)
+        }
+        if (bankAccountFilter.trim()) {
+          const acc = bankAccountFilter.trim()
+          query = query.or(`creditor_account_number.ilike.%${acc}%,debtor_account_number.ilike.%${acc}%`)
         }
         if (status !== 'All') {
           query = query.eq('transaction_status', status)
@@ -477,6 +488,13 @@ export default function Home() {
           >
             <span>👥</span> Beneficiary Directory
           </button>
+          
+          <button 
+            onClick={() => setActiveView('import')} 
+            className={`${styles.navLink} ${activeView === 'import' ? styles.active : ''}`}
+          >
+            <span>📤</span> Bulk Import
+          </button>
         </nav>
 
         <div className={styles.sidebarFooter}>
@@ -553,14 +571,36 @@ export default function Home() {
               </section>
 
               {/* Search & Filters Controls */}
-              <section className={styles.filterSection}>
+              <section className={styles.filterSection} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                 <div className={styles.searchWrapper}>
                   <span className={styles.searchIcon}>🔍</span>
                   <input 
                     type="text" 
-                    placeholder="Search Creditor, Batch, or Tx ID..." 
+                    placeholder="Search Creditor, Batch..." 
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
+                    className={styles.searchInput}
+                  />
+                </div>
+
+                <div className={styles.searchWrapper}>
+                  <span className={styles.searchIcon}>💬</span>
+                  <input 
+                    type="text" 
+                    placeholder="Filter by Comment..." 
+                    value={commentFilter}
+                    onChange={(e) => setCommentFilter(e.target.value)}
+                    className={styles.searchInput}
+                  />
+                </div>
+
+                <div className={styles.searchWrapper}>
+                  <span className={styles.searchIcon}>🏦</span>
+                  <input 
+                    type="text" 
+                    placeholder="Bank Account..." 
+                    value={bankAccountFilter}
+                    onChange={(e) => setBankAccountFilter(e.target.value)}
                     className={styles.searchInput}
                   />
                 </div>
@@ -846,6 +886,26 @@ export default function Home() {
 
         </div>
       </main>
+
+      {/* 3. BULK IMPORT VIEW */}
+          {activeView === 'import' && (
+            <>
+              <header className={styles.header}>
+                <div className={styles.titleGroup}>
+                  <h1>Bulk Import Transactions</h1>
+                  <p className={styles.subtitle}>Upload ACH settlement reports securely</p>
+                </div>
+              </header>
+              <div className={styles.tableCard} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem', border: '2px dashed var(--border-color)', background: 'rgba(255,255,255,0.01)' }}>
+                <div style={{ fontSize: '3rem', margin: '1rem' }}>📤</div>
+                <h3 style={{ marginBottom: '0.5rem', color: 'white' }}>Drag & Drop Excel/CSV File</h3>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>Supported formats: .xls, .xlsx, .csv</p>
+                <button className={styles.submitBtn} onClick={() => alert('Backend parsing logic is required for Excel files. Currently data is loaded via the python bulk-uploader.')}>
+                  Select File to Upload
+                </button>
+              </div>
+            </>
+          )}
 
       {/* 4. DETAIL HISTORY SLIDE-OUT DRAWER PANEL */}
       {selectedBen && (
