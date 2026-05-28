@@ -1,8 +1,145 @@
+/* Complete Glassmorphic Portal Stylesheet for Nile University ACH Treasury System */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.appLayout {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background-color: var(--bg-primary);
+}
+
+/* ---------------------------------------------------- */
+/* SIDEBAR STYLING                                      */
+/* ---------------------------------------------------- */
+.sidebar {
+  width: 260px;
+  background: rgba(15, 20, 32, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-right: 1px solid var(--border-color);
+  padding: 2rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 100%;
+}
+
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 3rem;
+  padding-left: 0.5rem;
+}
+
+.sidebarLogo {
+  font-size: 1.85rem;
+}
+
+.sidebarLogoText {
+  font-weight: 800;
+  font-size: 1.25rem;
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, #ffffff 40%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.sidebarNav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.navLink {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  padding: 0.85rem 1.25rem;
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.navLink:hover {
+  background: var(--bg-hover);
+  color: #ffffff;
+}
+
+.active {
+  background: var(--accent-glow);
+  color: var(--accent-color);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.sidebarFooter {
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.userInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-left: 0.25rem;
+}
+
+.userAvatar {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+  font-size: 0.9rem;
+  color: white;
+}
+
+.userName {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: white;
+}
+
+.userRole {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* ---------------------------------------------------- */
+/* MAIN CONTENT STYLING                                 */
+/* ---------------------------------------------------- */
+.mainContent {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2.5rem;
+  position: relative;
+}
+
 .container {
-  max-width: 1400px;
+  max-width: 1250px;
   margin: 0 auto;
-  padding: 2.5rem 1.5rem;
-  animation: fadeIn 0.6s ease-out;
+  animation: fadeIn 0.4s ease-out;
 }
 
 /* Header Section */
@@ -59,10 +196,12 @@
   transform: none;
 }
 
-/* Overview Dashboard / KPI Cards */
+/* ---------------------------------------------------- */
+/* KPI CARDS STYLING                                    */
+/* ---------------------------------------------------- */
 .kpiGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1.5rem;
   margin-bottom: 2.5rem;
 }
@@ -118,7 +257,6 @@
   gap: 0.25rem;
 }
 
-/* Specific KPI Theme Colors */
 .kpiAccent .kpiIcon {
   background: rgba(59, 130, 246, 0.1);
   color: var(--accent-color);
@@ -136,24 +274,20 @@
   color: var(--warning-color);
 }
 
-/* Search and Filters Controls */
+/* ---------------------------------------------------- */
+/* FILTERS SECTION                                      */
+/* ---------------------------------------------------- */
 .filterSection {
   background: var(--bg-card);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
-  padding: 1.5rem;
+  padding: 1.25rem;
   border-radius: 20px;
   margin-bottom: 1.5rem;
   display: grid;
   grid-template-columns: 2fr 1fr 1fr 1fr;
   gap: 1rem;
   align-items: center;
-}
-
-@media (max-width: 968px) {
-  .filterSection {
-    grid-template-columns: 1fr;
-  }
 }
 
 .searchWrapper {
@@ -208,7 +342,6 @@
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
-/* Date input */
 .dateInput {
   background: rgba(10, 12, 16, 0.6);
   border: 1px solid var(--border-color);
@@ -226,7 +359,9 @@
   border-color: var(--accent-color);
 }
 
-/* Table Card Container */
+/* ---------------------------------------------------- */
+/* TABLE CARD & GRID                                   */
+/* ---------------------------------------------------- */
 .tableCard {
   background: var(--bg-card);
   backdrop-filter: blur(16px);
@@ -310,7 +445,6 @@
   border: 1px solid rgba(245, 158, 11, 0.2);
 }
 
-/* Pagination Control */
 .pagination {
   display: flex;
   justify-content: space-between;
@@ -352,7 +486,314 @@
   cursor: not-allowed;
 }
 
-/* Empty State */
+/* ---------------------------------------------------- */
+/* BENEFICIARY DIRECTORY STYLING                        */
+/* ---------------------------------------------------- */
+.beneficiaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2.5rem;
+}
+
+.beneficiaryCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.beneficiaryCard:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(18, 22, 32, 0.85);
+}
+
+.benInfo {
+  margin-bottom: 1.25rem;
+}
+
+.benAvatar {
+  width: 44px;
+  height: 44px;
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--accent-color);
+  border-radius: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+.benName {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: white;
+  margin-bottom: 0.35rem;
+}
+
+.benCategory {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.benDetails {
+  border-top: 1px solid var(--border-color);
+  padding-top: 1rem;
+}
+
+.benLabel {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.benValue {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: white;
+  margin-bottom: 0.75rem;
+}
+
+.benActionRow {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.benBtn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  color: white;
+  font-weight: 600;
+  font-size: 0.8rem;
+  padding: 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.benBtn:hover {
+  background: var(--bg-hover);
+}
+
+.benPayBtn {
+  flex: 1;
+  background: var(--accent-color);
+  border: 1px solid var(--accent-color);
+  color: white;
+  font-weight: 600;
+  font-size: 0.8rem;
+  padding: 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.benPayBtn:hover {
+  filter: brightness(1.15);
+}
+
+/* ---------------------------------------------------- */
+/* SLIDEOUT DRAWER FOR BENEFICIARY DETAIL               */
+/* ---------------------------------------------------- */
+.drawerOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.drawer {
+  width: 550px;
+  height: 100%;
+  background: rgba(10, 12, 16, 0.95);
+  backdrop-filter: blur(20px);
+  border-left: 1px solid var(--border-color);
+  padding: 2.5rem;
+  overflow-y: auto;
+  box-shadow: -10px 0 40px rgba(0, 0, 0, 0.5);
+  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.drawerHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 1rem;
+}
+
+.drawerClose {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.drawerClose:hover {
+  color: white;
+}
+
+.drawerMeta {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  padding: 1.5rem;
+  border-radius: 16px;
+  margin-bottom: 2rem;
+}
+
+/* ---------------------------------------------------- */
+/* FORMS AND INPUTS                                     */
+/* ---------------------------------------------------- */
+.formCard {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 2.5rem;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.formGroup {
+  margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.inputField {
+  background: rgba(10, 12, 16, 0.7);
+  border: 1px solid var(--border-color);
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  color: white;
+  font-family: inherit;
+  font-size: 0.95rem;
+  transition: all 0.2s;
+}
+
+.inputField:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.textareaField {
+  background: rgba(10, 12, 16, 0.7);
+  border: 1px solid var(--border-color);
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  color: white;
+  font-family: inherit;
+  font-size: 0.95rem;
+  min-height: 100px;
+  resize: vertical;
+  transition: all 0.2s;
+}
+
+.textareaField:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.submitBtn {
+  background: linear-gradient(135deg, var(--accent-color) 0%, #1d4ed8 100%);
+  color: white;
+  border: none;
+  padding: 0.95rem;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 1rem;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px var(--accent-glow);
+}
+
+.submitBtn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+  box-shadow: 0 6px 16px var(--accent-glow);
+}
+
+.submitBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ---------------------------------------------------- */
+/* STATUSES & UTILITIES                                 */
+/* ---------------------------------------------------- */
+.successBanner {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: var(--success-color);
+  padding: 1rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.errorBanner {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--error-color);
+  padding: 1rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .noData {
   padding: 4rem 2rem;
   text-align: center;
@@ -375,7 +816,6 @@
   font-size: 0.85rem;
 }
 
-/* Loading Spinners */
 .loaderWrapper {
   display: flex;
   justify-content: center;
@@ -394,4 +834,45 @@
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+@media (max-width: 968px) {
+  .appLayout {
+    flex-direction: column;
+  }
+  
+  .sidebar {
+    width: 100%;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    padding: 1rem;
+  }
+  
+  .sidebarHeader {
+    margin-bottom: 1rem;
+  }
+  
+  .sidebarNav {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+  }
+  
+  .navLink {
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+  }
+  
+  .mainContent {
+    padding: 1.5rem;
+  }
+  
+  .filterSection {
+    grid-template-columns: 1fr;
+  }
+  
+  .drawer {
+    width: 100%;
+  }
 }
