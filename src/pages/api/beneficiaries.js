@@ -24,7 +24,7 @@ export default async function handler(req, res) {
 
       if (search.trim()) {
         const term = `%${search.trim()}%`
-        query = query.or(`name.ilike.${term},account_number.ilike.${term}`)
+        query = query.or(`name.ilike.${term},account_number.ilike.${term},employee_code.ilike.${term}`)
       }
 
       // Order alphabetically by name
