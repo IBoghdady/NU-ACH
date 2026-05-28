@@ -23,7 +23,8 @@ export default async function handler(req, res) {
     sortBy = 'batch_settlement_date',
     sortOrder = 'desc',
     comment = '',
-    bankAccount = ''
+    bankAccount = '',
+    employeeCode = ''
   } = req.query
 
   const pageNum = parseInt(page, 10)
@@ -62,6 +63,10 @@ export default async function handler(req, res) {
       query = query.or(`creditor_account_number.ilike.%${acc}%,debtor_account_number.ilike.%${acc}%`)
     }
 
+    if (employeeCode.trim()) {
+      query = query.eq('employee_code', employeeCode.trim())
+    }
+
     query = query
       .order(sortBy, { ascending: sortOrder === 'asc' })
       .range(from, to)
@@ -81,7 +86,7 @@ export default async function handler(req, res) {
 
     // If advanced comment or bankAccount filters are active, we query stats dynamically using fallback select
     // to ensure complete accuracy. Otherwise, we can try using RPC first.
-    const hasAdvancedFilters = comment.trim() !== '' || bankAccount.trim() !== ''
+    const hasAdvancedFilters = comment.trim() !== '' || bankAccount.trim() !== '' || employeeCode.trim() !== ''
 
     let statsFetched = false
 
@@ -134,6 +139,9 @@ export default async function handler(req, res) {
       if (bankAccount.trim()) {
         const acc = bankAccount.trim()
         statsQuery = statsQuery.or(`creditor_account_number.ilike.%${acc}%,debtor_account_number.ilike.%${acc}%`)
+      }
+      if (employeeCode.trim()) {
+        statsQuery = statsQuery.eq('employee_code', employeeCode.trim())
       }
 
       // Execute stats call capped at 25000 rows for Vercel/Supabase safety
