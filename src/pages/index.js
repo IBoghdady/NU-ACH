@@ -461,9 +461,7 @@ export default function Home() {
       <main className={styles.mainContent}>
         <div className={styles.container}>
 
-          {/* ================================================================ */}
-          /* 1. DASHBOARD VIEW ARCHIVE                                        */
-          /* ================================================================ */}
+          {/* 1. DASHBOARD VIEW ARCHIVE */}
           {activeView === 'dashboard' && (
             <>
               <header className={styles.header}>
@@ -663,9 +661,7 @@ export default function Home() {
             </>
           )}
 
-          {/* ================================================================ */}
-          /* 2. BENEFICIARIES DIRECTORY VIEW                                  */
-          /* ================================================================ */}
+          {/* 2. BENEFICIARIES DIRECTORY VIEW */}
           {activeView === 'beneficiaries' && (
             <>
               <header className={styles.header}>
@@ -820,9 +816,7 @@ export default function Home() {
             </>
           )}
 
-          {/* ================================================================ */}
-          /* 3. NEW OUTBOUND TRANSFER VIEW                                     */
-          /* ================================================================ */}
+          {/* 3. NEW OUTBOUND TRANSFER VIEW */}
           {activeView === 'transfer' && (
             <>
               <header className={styles.header}>
@@ -920,9 +914,7 @@ export default function Home() {
         </div>
       </main>
 
-      {/* ================================================================ */}
-      /* 4. DETAIL HISTORY SLIDE-OUT DRAWER PANEL                        */
-      /* ================================================================ */}
+      {/* 4. DETAIL HISTORY SLIDE-OUT DRAWER PANEL */}
       {selectedBen && (
         <div className={styles.drawerOverlay} onClick={() => setSelectedBen(null)}>
           <div className={styles.drawer} onClick={(e) => e.stopPropagation()}>
