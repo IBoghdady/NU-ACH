@@ -240,6 +240,7 @@ export default function Home() {
   // ----------------------------------------------------------------
   const [beneficiaries, setBeneficiaries] = useState([])
   const [benSearch, setBenSearch] = useState('')
+  const [benEmployeeCodeSearch, setBenEmployeeCodeSearch] = useState('')
   const [isBenLoading, setIsBenLoading] = useState(false)
   const [showAddBen, setShowAddBen] = useState(false)
   const [selectedBen, setSelectedBen] = useState(null)
@@ -257,7 +258,7 @@ export default function Home() {
   const fetchBeneficiaries = async () => {
     setIsBenLoading(true)
     try {
-      const res = await fetch(`/api/beneficiaries?limit=150&search=${encodeURIComponent(benSearch)}`)
+      const res = await fetch(`/api/beneficiaries?limit=150&search=${encodeURIComponent(benSearch)}&employeeCode=${encodeURIComponent(benEmployeeCodeSearch)}`)
       if (!res.ok) throw new Error('Could not pull beneficiaries.')
       const data = await res.json()
       setBeneficiaries(data.beneficiaries || [])
@@ -282,7 +283,7 @@ export default function Home() {
       }, 350)
       return () => clearTimeout(delayDebounce)
     }
-  }, [benSearch])
+  }, [benSearch, benEmployeeCodeSearch])
 
   // Handle adding new Beneficiary
   const handleAddBeneficiary = async (e) => {
@@ -819,14 +820,24 @@ export default function Home() {
               )}
 
               {/* Search Bar for Beneficiaries */}
-              <section className={styles.filterSection} style={{ gridTemplateColumns: '1fr' }}>
+              <section className={styles.filterSection} style={{ gridTemplateColumns: '1fr 150px' }}>
                 <div className={styles.searchWrapper}>
                   <span className={styles.searchIcon}>🔍</span>
                   <input 
                     type="text" 
-                    placeholder="Search Beneficiary Directory by name, account, or Employee ID..." 
+                    placeholder="Search Beneficiary Directory by name or account..." 
                     value={benSearch}
                     onChange={(e) => setBenSearch(e.target.value)}
+                    className={styles.searchInput}
+                  />
+                </div>
+                <div className={styles.searchWrapper}>
+                  <span className={styles.searchIcon}>👤</span>
+                  <input 
+                    type="text" 
+                    placeholder="Emp ID..." 
+                    value={benEmployeeCodeSearch}
+                    onChange={(e) => setBenEmployeeCodeSearch(e.target.value)}
                     className={styles.searchInput}
                   />
                 </div>
