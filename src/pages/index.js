@@ -67,78 +67,151 @@ export default function Home() {
     return () => clearTimeout(delayDebounceFn)
   }, [search])
 
-  // Export to CSV Function
+  // Export to Excel Function
   const handleExport = async () => {
     setIsExporting(true)
     try {
-      // Fetch all matching rows (up to 10,000 for safety)
-      let query = supabase.from('transactions').select('*')
+      let allRows = []
+      let from = 0
+      let to = 999
+      let hasMore = true
 
-      if (search.trim()) {
-        const term = `%${search.strip ? search.strip() : search.trim()}%`
-        query = query.or(`creditor_name.ilike.${term},batch_id.ilike.${term},transaction_id.ilike.${term}`)
+      // Fetch all matching rows in batches of 1,000 to bypass PostgREST's 1,000-row limit!
+      while (hasMore) {
+        let query = supabase.from('transactions').select('*')
+
+        if (search.trim()) {
+          const term = `%${search.trim()}%`
+          query = query.or(`creditor_name.ilike.${term},batch_id.ilike.${term},transaction_id.ilike.${term}`)
+        }
+        if (status !== 'All') {
+          query = query.eq('transaction_status', status)
+        }
+        if (startDate) {
+          query = query.gte('batch_settlement_date', startDate)
+        }
+        if (endDate) {
+          query = query.lte('batch_settlement_date', endDate)
+        }
+
+        // Fetch paginated chunk sorted by date
+        query = query
+          .order('batch_settlement_date', { ascending: false })
+          .range(from, to)
+
+        const { data, error } = await query
+        if (error) throw error
+
+        if (!data || data.length === 0) {
+          hasMore = false
+        } else {
+          allRows = [...allRows, ...data]
+          if (data.length < 1000) {
+            hasMore = false
+          } else {
+            from += 1000
+            to += 1000
+          }
+        }
       }
-      if (status !== 'All') {
-        query = query.eq('transaction_status', status)
-      }
-      if (startDate) {
-        query = query.gte('batch_settlement_date', startDate)
-      }
-      if (endDate) {
-        query = query.lte('batch_settlement_date', endDate)
-      }
 
-      // Order by date descending
-      query = query.order('batch_settlement_date', { ascending: false }).limit(25000)
-
-      const { data: allRows, error } = await query
-
-      if (error) throw error
-
-      if (!allRows || allRows.length === 0) {
+      if (allRows.length === 0) {
         alert('No data matches the current filters to export!')
         return
       }
 
-      // Convert to CSV
-      const headers = [
-        'Batch ID', 'Settlement Date', 'Currency', 'Transaction ID', 'Amount', 
-        'Debtor Name', 'Debtor Account', 'Creditor Name', 'Creditor Account', 
-        'Purpose', 'Status', 'ISO Description', 'Comment'
-      ]
+      // Convert to a premium Excel-compliant HTML spreadsheet (handles Arabic & grids perfectly)
+      let excelTemplate = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="UTF-8">
+        <!--[if gte mso 9]>
+        <xml>
+          <x:ExcelWorkbook>
+            <x:ExcelWorksheets>
+              <x:ExcelWorksheet>
+                <x:Name>Nile University ACH</x:Name>
+                <x:WorksheetOptions>
+                  <x:DisplayGridlines/>
+                </x:WorksheetOptions>
+              </x:ExcelWorksheet>
+            </x:ExcelWorksheets>
+          </x:ExcelWorkbook>
+        </xml>
+        <![endif]-->
+        <style>
+          table { border-collapse: collapse; font-family: Arial, sans-serif; }
+          th { background-color: #1e293b; color: #ffffff; padding: 10px; border: 1px solid #cbd5e1; }
+          td { padding: 8px; border: 1px solid #cbd5e1; }
+          .number { mso-number-format: "\#,##0\.00"; text-align: right; }
+          .text { mso-number-format: "\@"; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <thead>
+            <tr>
+              <th>Batch ID</th>
+              <th>Settlement Date</th>
+              <th>Currency</th>
+              <th>Transaction ID</th>
+              <th>Transaction Amount (EGP)</th>
+              <th>Debtor Name</th>
+              <th>Debtor Account Number</th>
+              <th>Debtor Party BIC</th>
+              <th>Creditor Name</th>
+              <th>Creditor Account Number</th>
+              <th>Creditor Party BIC</th>
+              <th>Transaction Purpose</th>
+              <th>Transaction Status</th>
+              <th>ISO Status Description</th>
+              <th>ISO Rejection Reason</th>
+              <th>Comment</th>
+            </tr>
+          </thead>
+          <tbody>`
 
-      const csvRows = [
-        headers.join(','), // Header row
-        ...allRows.map(row => {
-          return [
-            `"${row.batch_id || ''}"`,
-            `"${row.batch_settlement_date || ''}"`,
-            `"${row.batch_currency || ''}"`,
-            `"${row.transaction_id || ''}"`,
-            row.transaction_amount || 0,
-            `"${row.debtor_name || ''}"`,
-            `"${row.debtor_account_number || ''}"`,
-            `"${row.creditor_name || ''}"`,
-            `"${row.creditor_account_number || ''}"`,
-            `"${row.transaction_purpose || ''}"`,
-            `"${row.transaction_status || ''}"`,
-            `"${row.isostatus_description || ''}"`,
-            `"${row.comment || ''}"`
-          ].join(',')
-        })
-      ]
+      allRows.forEach(row => {
+        excelTemplate += `
+            <tr>
+              <td class="text">${row.batch_id || ''}</td>
+              <td>${row.batch_settlement_date || ''}</td>
+              <td>${row.batch_currency || ''}</td>
+              <td class="text">${row.transaction_id || ''}</td>
+              <td class="number">${row.transaction_amount || 0}</td>
+              <td>${row.debtor_name || ''}</td>
+              <td class="text">${row.debtor_account_number || ''}</td>
+              <td>${row.debtor_party_bic || ''}</td>
+              <td>${row.creditor_name || ''}</td>
+              <td class="text">${row.creditor_account_number || ''}</td>
+              <td>${row.creditor_party_bic || ''}</td>
+              <td>${row.transaction_purpose || ''}</td>
+              <td>${row.transaction_status || ''}</td>
+              <td>${row.isostatus_description || ''}</td>
+              <td>${row.transaction_isostatus_reason || ''}</td>
+              <td>${row.comment || ''}</td>
+            </tr>`
+      })
 
-      const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + csvRows.join('\n')
-      const encodedUri = encodeURI(csvContent)
+      excelTemplate += `
+          </tbody>
+        </table>
+      </body>
+      </html>`
+
+      // Generate file download link
+      const blob = new Blob([excelTemplate], { type: 'application/vnd.ms-excel;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
-      link.setAttribute("href", encodedUri)
-      link.setAttribute("download", `NU_Transactions_Export_${new Date().toISOString().slice(0,10)}.csv`)
+      link.href = url
+      link.download = `NU_ACH_Export_${new Date().toISOString().slice(0, 10)}.xls`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
     } catch (err) {
       console.error(err)
-      alert('Failed to export. Please try again.')
+      alert('Failed to export to Excel. Please try again.')
     } finally {
       setIsExporting(false)
     }
