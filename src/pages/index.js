@@ -151,6 +151,16 @@ export default function Home() {
     XLSX.writeFile(wb, `ACH_Payout_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
+  const downloadPayoutTemplate = () => {
+    const templateData = [
+      { "Employee ID": "", "Amount": "", "Comment": "" }
+    ]
+    const ws = XLSX.utils.json_to_sheet(templateData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Template")
+    XLSX.writeFile(wb, "Payout_Template.xlsx")
+  }
+
   // Helper: Copy text to clipboard
   const copyToClipboard = (text, key) => {
     navigator.clipboard.writeText(text)
@@ -1304,7 +1314,23 @@ export default function Home() {
             <div className={styles.filtersSection} style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', gap: '20px', width: '100%', alignItems: 'center' }}>
                 <div style={{ flex: 1 }}>
-                  <label className={styles.filterLabel}>1. Upload Simplified Data (.xlsx or .csv)</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label className={styles.filterLabel} style={{ marginBottom: 0 }}>1. Upload Simplified Data (.xlsx or .csv)</label>
+                    <button 
+                      onClick={downloadPayoutTemplate}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--primary)',
+                        cursor: 'pointer',
+                        fontSize: '0.85rem',
+                        textDecoration: 'underline',
+                        padding: 0
+                      }}
+                    >
+                      📥 Download Template
+                    </button>
+                  </div>
                   <input 
                     type="file" 
                     accept=".xlsx, .xls, .csv" 
