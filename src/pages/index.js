@@ -481,6 +481,128 @@ export default function Home() {
   const [benFormSuccess, setBenFormSuccess] = useState('')
   const [benFormError, setBenFormError] = useState('')
 
+  // Bulk Registration States
+  const [showBulkConflictModal, setShowBulkConflictModal] = useState(false)
+  const [bulkConflicts, setBulkConflicts] = useState([]) // array of { newRow, existingRow, action: 'skip' | 'update' }
+  const [bulkNewBens, setBulkNewBens] = useState([])
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false)
+
+  const downloadBulkRegistrationTemplate = () => {
+    const templateData = [{ "Name": "John Doe", "Account Number": "123456789", "BIC": "CIBEEGCX", "Employee Code": "EMP-123", "Category": "Operational" }]
+    const ws = XLSX.utils.json_to_sheet(templateData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Template")
+    XLSX.writeFile(wb, "Bulk_Registration_Template.xlsx")
+  }
+
+  const exportAllBeneficiaries = async () => {
+    try {
+      const { data, error } = await supabase.from('beneficiaries').select('*').order('name', { ascending: true })
+      if (error) throw error
+      if (!data || data.length === 0) return alert('No beneficiaries found.')
+      const ws = XLSX.utils.json_to_sheet(data)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, "Beneficiaries")
+      XLSX.writeFile(wb, `NU_Beneficiaries_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    } catch (err) {
+      console.error(err)
+      alert('Failed to export beneficiaries.')
+    }
+  }
+
+  const handleBulkRegistrationUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setIsBulkProcessing(true)
+    const reader = new FileReader()
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target.result
+        const wb = XLSX.read(bstr, { type: 'binary' })
+        const wsname = wb.SheetNames[0]
+        const ws = wb.Sheets[wsname]
+        const rawData = XLSX.utils.sheet_to_json(ws)
+        
+        if (!rawData || rawData.length === 0) throw new Error('File is empty or invalid.')
+        
+        // Fetch all existing beneficiaries to check conflicts
+        const { data: existingData, error } = await supabase.from('beneficiaries').select('*')
+        if (error) throw error
+        const existingMap = new Map()
+        existingData.forEach(b => existingMap.set(b.account_number.toString(), b))
+
+        const newBens = []
+        const conflicts = []
+
+        rawData.forEach(row => {
+          const name = row['Name'] || row['name']
+          const acc = (row['Account Number'] || row['account_number'] || row['account'])?.toString()
+          if (!name || !acc) return // skip invalid
+          
+          const newRow = {
+            name: String(name).trim(),
+            account_number: acc.trim(),
+            bank_bic: (row['BIC'] || row['bic'] || row['bank_bic'])?.toString()?.trim() || null,
+            employee_code: (row['Employee Code'] || row['employee_code'])?.toString()?.trim() || null,
+            category: (row['Category'] || row['category'])?.toString()?.trim() || 'Operational'
+          }
+
+          if (existingMap.has(newRow.account_number)) {
+            conflicts.push({ newRow, existingRow: existingMap.get(newRow.account_number), action: 'skip' })
+          } else {
+            newBens.push(newRow)
+          }
+        })
+
+        setBulkNewBens(newBens)
+        if (conflicts.length > 0) {
+          setBulkConflicts(conflicts)
+          setShowBulkConflictModal(true)
+        } else {
+          await executeBulkInsert(newBens, [])
+        }
+      } catch (err) {
+        console.error(err)
+        alert('Failed to process bulk upload: ' + err.message)
+      } finally {
+        setIsBulkProcessing(false)
+        e.target.value = '' // reset input
+      }
+    }
+    reader.readAsBinaryString(file)
+  }
+
+  const executeBulkInsert = async (newBens, resolvedConflicts) => {
+    setIsBulkProcessing(true)
+    try {
+      const updates = resolvedConflicts.filter(c => c.action === 'update').map(c => ({
+        id: c.existingRow.id,
+        ...c.newRow
+      }))
+
+      // Insert new
+      if (newBens.length > 0) {
+        const { error: insertErr } = await supabase.from('beneficiaries').insert(newBens)
+        if (insertErr) throw insertErr
+      }
+
+      // Update existing
+      if (updates.length > 0) {
+        const { error: updateErr } = await supabase.from('beneficiaries').upsert(updates)
+        if (updateErr) throw updateErr
+      }
+
+      alert(`Successfully registered ${newBens.length} new and updated ${updates.length} existing beneficiaries.`)
+      setShowBulkConflictModal(false)
+      fetchBeneficiaries()
+    } catch (err) {
+      console.error(err)
+      alert('Database execution failed: ' + err.message)
+    } finally {
+      setIsBulkProcessing(false)
+    }
+  }
+
   const fetchBeneficiaries = async () => {
     setIsBenLoading(true)
     try {
@@ -1076,12 +1198,44 @@ export default function Home() {
                   <h1>Beneficiary Directory</h1>
                   <p className={styles.subtitle}>Verified supplier, contractor, and operational receiving accounts</p>
                 </div>
-                <button 
-                  onClick={() => setShowAddBen(!showAddBen)} 
-                  className={styles.exportBtn}
-                >
-                  {showAddBen ? 'Close Registration' : '➕ Register Beneficiary'}
-                </button>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <button 
+                    onClick={exportAllBeneficiaries}
+                    className={styles.submitBtn}
+                    style={{ margin: 0, padding: '0.75rem 1.25rem', width: 'auto', background: 'rgba(255,255,255,0.05)', boxShadow: 'none', border: '1px solid var(--border-color)', color: 'white' }}
+                  >
+                    📥 Export All
+                  </button>
+                  <button 
+                    onClick={downloadBulkRegistrationTemplate}
+                    className={styles.submitBtn}
+                    style={{ margin: 0, padding: '0.75rem 1.25rem', width: 'auto', background: 'rgba(255,255,255,0.05)', boxShadow: 'none', border: '1px solid var(--border-color)', color: 'white' }}
+                  >
+                    📄 Template
+                  </button>
+                  <div style={{ position: 'relative' }}>
+                    <button 
+                      className={styles.submitBtn}
+                      style={{ margin: 0, padding: '0.75rem 1.25rem', width: 'auto', background: 'rgba(59, 130, 246, 0.1)', boxShadow: 'none', border: '1px solid rgba(59, 130, 246, 0.3)', color: '#60a5fa' }}
+                    >
+                      {isBulkProcessing ? '⏳ Uploading...' : '📤 Bulk Upload'}
+                    </button>
+                    <input 
+                      type="file" 
+                      accept=".xlsx, .xls, .csv" 
+                      onChange={handleBulkRegistrationUpload}
+                      disabled={isBulkProcessing}
+                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: isBulkProcessing ? 'not-allowed' : 'pointer' }}
+                    />
+                  </div>
+                  <button 
+                    onClick={() => setShowAddBen(!showAddBen)} 
+                    className={styles.exportBtn}
+                    style={{ padding: '0.75rem 1.25rem' }}
+                  >
+                    {showAddBen ? 'Close Registration' : '➕ Register Beneficiary'}
+                  </button>
+                </div>
               </header>
 
               {/* Add Beneficiary Form */}
@@ -1705,6 +1859,81 @@ export default function Home() {
               <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', justifyContent: 'flex-end' }}>
                 <button className={styles.submitBtn} style={{ background: 'var(--surface-color)', flex: 0, padding: '10px 20px' }} onClick={() => setShowGroupPayoutModal(false)}>Cancel</button>
                 <button className={styles.submitBtn} style={{ flex: 0, padding: '10px 20px', whiteSpace: 'nowrap' }} onClick={handleGroupQuickPayout}>🗜️ Export ZIP Archive</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bulk Upload Conflict Resolution Modal */}
+        {showBulkConflictModal && (
+          <div className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && setShowBulkConflictModal(false)}>
+            <div className={styles.modalContent} style={{ maxWidth: '800px', width: '90%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: '800' }}>⚠️ Resolve Duplicate Accounts</h2>
+                <button onClick={() => setShowBulkConflictModal(false)} className={styles.closeBtn}>×</button>
+              </div>
+              
+              <div style={{ marginBottom: '1.5rem', color: 'var(--text-secondary)' }}>
+                We found <strong>{bulkConflicts.length}</strong> account(s) that already exist in the directory. Please select whether to update their data or skip them.
+              </div>
+
+              <div style={{ maxHeight: '50vh', overflowY: 'auto', paddingRight: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {bulkConflicts.map((conflict, idx) => (
+                  <div key={idx} style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Uploaded Data</div>
+                        <div style={{ fontWeight: 'bold' }}>{conflict.newRow.name}</div>
+                        <div style={{ fontFamily: 'monospace', color: 'var(--accent-color)' }}>{conflict.newRow.account_number}</div>
+                      </div>
+                      <div style={{ flex: 1, borderLeft: '1px solid var(--border-color)', paddingLeft: '1rem' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Existing Data</div>
+                        <div style={{ fontWeight: 'bold' }}>{conflict.existingRow.name}</div>
+                        <div style={{ fontFamily: 'monospace', color: 'var(--accent-color)' }}>{conflict.existingRow.account_number}</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '1rem' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                        <input 
+                          type="radio" 
+                          name={`conflict-${idx}`} 
+                          checked={conflict.action === 'skip'} 
+                          onChange={() => {
+                            const newConflicts = [...bulkConflicts];
+                            newConflicts[idx].action = 'skip';
+                            setBulkConflicts(newConflicts);
+                          }}
+                        /> 
+                        Skip (Keep Existing)
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                        <input 
+                          type="radio" 
+                          name={`conflict-${idx}`} 
+                          checked={conflict.action === 'update'} 
+                          onChange={() => {
+                            const newConflicts = [...bulkConflicts];
+                            newConflicts[idx].action = 'update';
+                            setBulkConflicts(newConflicts);
+                          }}
+                        /> 
+                        Update (Overwrite)
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', justifyContent: 'flex-end' }}>
+                <button className={styles.submitBtn} style={{ background: 'var(--surface-color)', flex: 0, padding: '10px 20px', boxShadow: 'none' }} onClick={() => setShowBulkConflictModal(false)}>Cancel</button>
+                <button 
+                  className={styles.submitBtn} 
+                  style={{ flex: 0, padding: '10px 20px', whiteSpace: 'nowrap' }} 
+                  onClick={() => executeBulkInsert(bulkNewBens, bulkConflicts)}
+                  disabled={isBulkProcessing}
+                >
+                  {isBulkProcessing ? 'Processing...' : 'Confirm & Import'}
+                </button>
               </div>
             </div>
           </div>
