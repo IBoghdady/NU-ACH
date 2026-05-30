@@ -700,7 +700,7 @@ export default function Home() {
         <div style={{ background: '#1e293b', padding: '40px', borderRadius: '12px', width: '400px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', border: '1px solid #334155' }}>
           <div style={{ textAlign: 'center', marginBottom: '30px' }}>
             <span style={{ fontSize: '40px' }}>🏛️</span>
-            <h1 style={{ color: 'white', fontSize: '24px', margin: '15px 0 5px 0' }}>Nile Treasury</h1>
+            <h1 style={{ color: 'white', fontSize: '24px', margin: '15px 0 5px 0' }}>NU Treasury</h1>
             <p style={{ color: '#94a3b8', margin: 0, fontSize: '14px' }}>Authorized Personnel Only</p>
           </div>
           {authError && (
@@ -745,7 +745,7 @@ export default function Home() {
       <aside className={styles.sidebar}>
         <div className={styles.sidebarHeader}>
           <span className={styles.sidebarLogo}>🏛️</span>
-          <div className={styles.sidebarLogoText}>Nile Treasury</div>
+          <div className={styles.sidebarLogoText}>NU Treasury</div>
         </div>
 
         <nav className={styles.sidebarNav}>
@@ -781,19 +781,32 @@ export default function Home() {
             <button 
               onClick={handleLogout} 
               className={styles.navLink}
-              style={{ color: '#ef4444', width: '100%', textAlign: 'left', marginTop: '20px' }}
+              style={{ 
+                color: '#f87171', 
+                width: '100%', 
+                textAlign: 'left', 
+                marginTop: '20px',
+                background: 'rgba(239, 68, 68, 0.05)',
+                border: '1px solid rgba(239, 68, 68, 0.1)',
+                justifyContent: 'center',
+                padding: '12px'
+              }}
             >
-              <span>🔒</span> Secure Sign Out
+              <span>🚪</span> Log Out
             </button>
           </div>
         </nav>
 
         <div className={styles.sidebarFooter}>
           <div className={styles.userInfo}>
-            <div className={styles.userAvatar}>NU</div>
-            <div>
-              <div className={styles.userName}>Nile University</div>
-              <div className={styles.userRole}>Treasury Officer</div>
+            <div className={styles.userAvatar}>
+              {session?.user?.email ? session.user.email.charAt(0).toUpperCase() : 'NU'}
+            </div>
+            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div className={styles.userName} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {session?.user?.email ? session.user.email.split('@')[0].replace(/[^a-zA-Z0-9]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'NU Officer'}
+              </div>
+              <div className={styles.userRole}>{session?.user?.email || 'Treasury Team'}</div>
             </div>
           </div>
         </div>
