@@ -1914,8 +1914,8 @@ export default function Home() {
 
         {/* Bulk Upload Conflict Resolution Modal */}
         {showBulkConflictModal && (
-          <div className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && setShowBulkConflictModal(false)}>
-            <div className={styles.modalContent} style={{ maxWidth: '800px', width: '90%' }}>
+          <div className={styles.drawerOverlay} style={{ zIndex: 1000, overflowY: 'auto', padding: '2rem' }} onClick={(e) => e.target === e.currentTarget && setShowBulkConflictModal(false)}>
+            <div className={styles.formCard} style={{ width: '800px', maxWidth: '100%', margin: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: '800' }}>⚠️ Resolve Duplicate Accounts</h2>
                 <button onClick={() => setShowBulkConflictModal(false)} className={styles.closeBtn}>×</button>
