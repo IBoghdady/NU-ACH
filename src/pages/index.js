@@ -558,13 +558,28 @@ export default function Home() {
         if (!rawData || rawData.length === 0) throw new Error('File is empty or invalid.')
         
         // Fetch all existing beneficiaries to check conflicts
-        const { data: existingData, error } = await supabase.from('beneficiaries').select('*')
-        if (error) throw error
+        let existingData = []
+        let from = 0
+        const limit = 1000
+        let hasMore = true
+        while (hasMore) {
+          const { data, error } = await supabase.from('beneficiaries').select('*').range(from, from + limit - 1)
+          if (error) throw error
+          if (data && data.length > 0) {
+            existingData = [...existingData, ...data]
+            from += limit
+          }
+          if (!data || data.length < limit) {
+            hasMore = false
+          }
+        }
+        
         const existingMap = new Map()
         existingData.forEach(b => existingMap.set(b.account_number.toString(), b))
 
         const newBens = []
         const conflicts = []
+        const newBensMap = new Set() // For deduplicating the excel file itself
 
         rawData.forEach(row => {
           const name = row['Name'] || row['name']
@@ -581,7 +596,8 @@ export default function Home() {
 
           if (existingMap.has(newRow.account_number)) {
             conflicts.push({ newRow, existingRow: existingMap.get(newRow.account_number), action: 'skip' })
-          } else {
+          } else if (!newBensMap.has(newRow.account_number)) {
+            newBensMap.add(newRow.account_number)
             newBens.push(newRow)
           }
         })
