@@ -38,8 +38,9 @@ export default async function handler(req, res) {
       const empId = row.employeeId?.toString().trim()
       const ben = benDict[empId] || {}
 
-      // Identify missing beneficiaries
-      const status = ben.name ? 'Matched' : 'Missing Bank Details'
+      // Identify missing beneficiaries or missing bank details
+      const isMissingDetails = !ben.name || !ben.account_number || !ben.bank_bic
+      const status = isMissingDetails ? 'Missing Bank Details' : 'Matched'
 
       return {
         _id: index + 1, // Unique row ID for UI
@@ -47,7 +48,7 @@ export default async function handler(req, res) {
         TransactionID: index + 1,
         CreditorName: ben.name || '',
         CreditorAccountNumber: ben.account_number || '',
-        CreditorBank: ben.bank_bic || 'CIBEEGCX',
+        CreditorBank: ben.bank_bic || '',
         CreditorBankBranch: '',
         TransactionAmount: row.amount || 0,
         TransactionPurpose: 'CASH', // Standard ACH purpose
