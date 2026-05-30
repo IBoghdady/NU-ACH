@@ -259,7 +259,15 @@ export default function Home() {
     if (activeView === 'dashboard') {
       const fetchAnalytics = async () => {
         try {
-          const res = await fetch('/api/analytics')
+          const queryParams = new URLSearchParams({
+            search: search,
+            comment: commentFilter,
+            bankAccount: bankAccountFilter,
+            status: status,
+            startDate: startDate,
+            endDate: endDate
+          })
+          const res = await fetch(`/api/analytics?${queryParams.toString()}`)
           if (res.ok) {
             const data = await res.json()
             setAnalyticsData({ topVendors: data.topVendors || [], dailyOutflows: data.dailyOutflows || [] })
@@ -270,7 +278,7 @@ export default function Home() {
       }
       fetchAnalytics()
     }
-  }, [activeView])
+  }, [activeView, search, commentFilter, bankAccountFilter, status, startDate, endDate])
 
   // --- Functions ---Dashboard Transactions
   const fetchDashboardData = async () => {
@@ -302,9 +310,9 @@ export default function Home() {
     }
   }
 
-  // Reload dashboard on filter changes
+  // Fetch Dashboard Transactions
   useEffect(() => {
-    if (activeView === 'dashboard') {
+    if (activeView === 'dashboard' || activeView === 'transactions') {
       fetchDashboardData()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -312,11 +320,11 @@ export default function Home() {
 
   // Debounced search trigger for Dashboard
   useEffect(() => {
-    if (activeView === 'dashboard') {
+    if (activeView === 'dashboard' || activeView === 'transactions') {
       const delayDebounce = setTimeout(() => {
-        setPage(1)
         fetchDashboardData()
-      }, 400)
+      }, 500)
+
       return () => clearTimeout(delayDebounce)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1004,6 +1012,13 @@ export default function Home() {
           >
             <span>📊</span> Dashboard Archive
           </button>
+
+          <button 
+            onClick={() => setActiveView('transactions')} 
+            className={`${styles.navLink} ${activeView === 'transactions' ? styles.active : ''}`}
+          >
+            <span>🗃️</span> Transactions Archive
+          </button>
           
           <button 
             onClick={() => { setActiveView('beneficiaries'); fetchBeneficiaries(); }} 
@@ -1065,21 +1080,85 @@ export default function Home() {
       <main className={styles.mainContent}>
         <div className={styles.container}>
 
+          {/* Shared Filters for Dashboard and Transactions */}
+          {(activeView === 'dashboard' || activeView === 'transactions') && (
+            <section className={styles.filterSection} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', marginBottom: '1.5rem' }}>
+              <div className={styles.searchWrapper}>
+                <span className={styles.searchIcon}>🔍</span>
+                <input 
+                  type="text" 
+                  placeholder="Search Creditor, Batch..." 
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className={styles.searchInput}
+                />
+              </div>
+
+              <div className={styles.searchWrapper}>
+                <span className={styles.searchIcon}>💬</span>
+                <input 
+                  type="text" 
+                  placeholder="Filter by Comment..." 
+                  value={commentFilter}
+                  onChange={(e) => setCommentFilter(e.target.value)}
+                  className={styles.searchInput}
+                />
+              </div>
+
+              <div className={styles.searchWrapper}>
+                <span className={styles.searchIcon}>🏦</span>
+                <input 
+                  type="text" 
+                  placeholder="Bank Account..." 
+                  value={bankAccountFilter}
+                  onChange={(e) => setBankAccountFilter(e.target.value)}
+                  className={styles.searchInput}
+                />
+              </div>
+
+              <div>
+                <select 
+                  value={status} 
+                  onChange={(e) => { setStatus(e.target.value); setPage(1); }}
+                  className={styles.selectInput}
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Accepted">Accepted / Settled</option>
+                  <option value="Rejected">Rejected</option>
+                  <option value="Returned">Returned</option>
+                </select>
+              </div>
+
+              <div>
+                <input 
+                  type="date" 
+                  value={startDate} 
+                  onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+                  className={styles.dateInput}
+                  title="Start Date"
+                />
+              </div>
+
+              <div>
+                <input 
+                  type="date" 
+                  value={endDate} 
+                  onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+                  className={styles.dateInput}
+                  title="End Date"
+                />
+              </div>
+            </section>
+          )}
+
           {/* 1. DASHBOARD VIEW ARCHIVE */}
           {activeView === 'dashboard' && (
             <>
               <header className={styles.header}>
                 <div className={styles.titleGroup}>
-                  <h1>Transactions Archive</h1>
-                  <p className={styles.subtitle}>Treasury Outbound ACH Payments Database (2019 - 2026)</p>
+                  <h1>Treasury Dashboard</h1>
+                  <p className={styles.subtitle}>Executive overview of outbound ACH payments</p>
                 </div>
-                <button 
-                  onClick={handleExport} 
-                  className={styles.exportBtn}
-                  disabled={isExporting || isLoading || transactions.length === 0}
-                >
-                  {isExporting ? <>⏳ Exporting to Excel...</> : <>📥 Export to Excel</>}
-                </button>
               </header>
 
               {/* KPI Cards Grid */}
@@ -1164,75 +1243,25 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+            </>
+          )}
 
-              {/* Search & Filters Controls */}
-              <section className={styles.filterSection} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-                <div className={styles.searchWrapper}>
-                  <span className={styles.searchIcon}>🔍</span>
-                  <input 
-                    type="text" 
-                    placeholder="Search Creditor, Batch..." 
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className={styles.searchInput}
-                  />
+          {/* 2. TRANSACTIONS ARCHIVE VIEW */}
+          {activeView === 'transactions' && (
+            <>
+              <header className={styles.header}>
+                <div className={styles.titleGroup}>
+                  <h1>Transactions Archive</h1>
+                  <p className={styles.subtitle}>Treasury Outbound ACH Payments Database (2019 - 2026)</p>
                 </div>
-
-                <div className={styles.searchWrapper}>
-                  <span className={styles.searchIcon}>💬</span>
-                  <input 
-                    type="text" 
-                    placeholder="Filter by Comment..." 
-                    value={commentFilter}
-                    onChange={(e) => setCommentFilter(e.target.value)}
-                    className={styles.searchInput}
-                  />
-                </div>
-
-                <div className={styles.searchWrapper}>
-                  <span className={styles.searchIcon}>🏦</span>
-                  <input 
-                    type="text" 
-                    placeholder="Bank Account..." 
-                    value={bankAccountFilter}
-                    onChange={(e) => setBankAccountFilter(e.target.value)}
-                    className={styles.searchInput}
-                  />
-                </div>
-
-                <div>
-                  <select 
-                    value={status} 
-                    onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-                    className={styles.selectInput}
-                  >
-                    <option value="All">All Statuses</option>
-                    <option value="Accepted">Accepted / Settled</option>
-                    <option value="Rejected">Rejected</option>
-                    <option value="Returned">Returned</option>
-                  </select>
-                </div>
-
-                <div>
-                  <input 
-                    type="date" 
-                    value={startDate} 
-                    onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
-                    className={styles.dateInput}
-                    title="Start Date"
-                  />
-                </div>
-
-                <div>
-                  <input 
-                    type="date" 
-                    value={endDate} 
-                    onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
-                    className={styles.dateInput}
-                    title="End Date"
-                  />
-                </div>
-              </section>
+                <button 
+                  onClick={handleExport} 
+                  className={styles.exportBtn}
+                  disabled={isExporting || isLoading || transactions.length === 0}
+                >
+                  {isExporting ? <>⏳ Exporting to Excel...</> : <>📥 Export to Excel</>}
+                </button>
+              </header>
 
               {/* Main Table Container */}
               <main className={styles.tableCard}>
