@@ -5,6 +5,7 @@ import styles from '../styles/Home.module.css'
 import { supabase } from '../lib/supabaseClient'
 import TransactionReceipt from '../components/TransactionReceipt'
 import * as XLSX from 'xlsx'
+import JSZip from 'jszip'
 
 export default function Home() {
   // Authentication State
@@ -159,6 +160,72 @@ export default function Home() {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Template")
     XLSX.writeFile(wb, "Payout_Template.xlsx")
+  }
+
+  const generateACHRow = (ben, amount, comment) => {
+    return {
+      TransactionID: 1,
+      CreditorName: ben.name || '',
+      CreditorAccountNumber: ben.account_number || '',
+      CreditorBank: ben.bank_bic || '',
+      CreditorBankBranch: '',
+      TransactionAmount: parseFloat(amount) || 0,
+      TransactionPurpose: 'CASH',
+      Comments: comment || '',
+      ReceiverEmail: '',
+      SMSMobileNumber: ''
+    }
+  }
+
+  const getFormattedDate = () => {
+    const d = new Date()
+    const day = String(d.getDate()).padStart(2, '0')
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const year = d.getFullYear()
+    return `${day}-${month}-${year}`
+  }
+
+  const handleSingleQuickPayout = () => {
+    const { amount, comment } = payoutFormData[selectedBen.id] || {}
+    if (!amount) return alert('Please enter an amount.')
+    
+    const row = generateACHRow(selectedBen, amount, comment)
+    const ws = XLSX.utils.json_to_sheet([row])
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "ACH")
+    XLSX.writeFile(wb, `${selectedBen.name} - ${amount} - ${getFormattedDate()}.xlsx`)
+    setShowSinglePayoutModal(false)
+  }
+
+  const handleGroupQuickPayout = async () => {
+    for (const ben of selectedForPayout) {
+      const { amount } = payoutFormData[ben.id] || {}
+      if (!amount) return alert(`Please enter an amount for ${ben.name}`)
+    }
+
+    const zip = new JSZip()
+    const dateStr = getFormattedDate()
+    
+    selectedForPayout.forEach((ben) => {
+      const { amount, comment } = payoutFormData[ben.id] || {}
+      const row = generateACHRow(ben, amount, comment)
+      const ws = XLSX.utils.json_to_sheet([row])
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, "ACH")
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+      zip.file(`${ben.name} - ${amount} - ${dateStr}.xlsx`, excelBuffer)
+    })
+
+    const zipBlob = await zip.generateAsync({ type: 'blob' })
+    const url = URL.createObjectURL(zipBlob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Group_Payout_${dateStr}.zip`
+    a.click()
+    URL.revokeObjectURL(url)
+    
+    setShowGroupPayoutModal(false)
+    setSelectedForPayout([])
   }
 
   // Helper: Copy text to clipboard
@@ -399,6 +466,12 @@ export default function Home() {
   const [selectedBen, setSelectedBen] = useState(null)
   const [benHistory, setBenHistory] = useState([])
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
+  
+  // Payout States
+  const [selectedForPayout, setSelectedForPayout] = useState([])
+  const [showGroupPayoutModal, setShowGroupPayoutModal] = useState(false)
+  const [showSinglePayoutModal, setShowSinglePayoutModal] = useState(false)
+  const [payoutFormData, setPayoutFormData] = useState({}) // { id: { amount, comment } }
   
   // New Beneficiary Form State
   const [newBenName, setNewBenName] = useState('')
@@ -1109,7 +1182,25 @@ export default function Home() {
                       className={styles.beneficiaryCard}
                       onClick={() => handleViewBeneficiaryDetails(ben)}
                     >
-                      <div className={styles.benInfo}>
+                      <div className={styles.benInfo} style={{ position: 'relative' }}>
+                        <div 
+                          style={{ position: 'absolute', top: '0', right: '0' }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input 
+                            type="checkbox" 
+                            style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
+                            checked={selectedForPayout.some(b => b.id === ben.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedForPayout([...selectedForPayout, ben])
+                                setPayoutFormData({ ...payoutFormData, [ben.id]: { amount: '', comment: '' } })
+                              } else {
+                                setSelectedForPayout(selectedForPayout.filter(b => b.id !== ben.id))
+                              }
+                            }}
+                          />
+                        </div>
                         <div className={styles.benAvatar}>
                           {ben.name ? ben.name.charAt(0).toUpperCase() : 'B'}
                         </div>
@@ -1143,6 +1234,41 @@ export default function Home() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+              {selectedForPayout.length > 0 && (
+                <div style={{
+                  position: 'fixed',
+                  bottom: '2rem',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: 'var(--card-bg)',
+                  border: '1px solid var(--border-color)',
+                  boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                  padding: '1rem 2rem',
+                  borderRadius: '50px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1.5rem',
+                  zIndex: 100
+                }}>
+                  <span style={{ color: 'white', fontWeight: 'bold' }}>{selectedForPayout.length} Selected</span>
+                  <button 
+                    className={styles.submitBtn} 
+                    style={{ padding: '0.5rem 1.5rem', borderRadius: '50px', margin: 0 }}
+                    onClick={() => setShowGroupPayoutModal(true)}
+                  >
+                    🚀 Group Payout
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setSelectedForPayout([])
+                      setPayoutFormData({})
+                    }}
+                    style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Clear
+                  </button>
                 </div>
               )}
             </>
@@ -1229,14 +1355,26 @@ export default function Home() {
                 </button>
               </div>
               
-              <button 
-                onClick={() => handleExportForBeneficiary(selectedBen)}
-                className={styles.submitBtn}
-                style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
-                disabled={isExporting}
-              >
-                📥 {isExporting ? 'Exporting Ledger...' : 'Export Payout Ledger to Excel'}
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button 
+                  onClick={() => handleExportForBeneficiary(selectedBen)}
+                  className={styles.submitBtn}
+                  style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', background: 'var(--surface-color)' }}
+                  disabled={isExporting}
+                >
+                  📥 Ledger
+                </button>
+                <button 
+                  onClick={() => {
+                    setPayoutFormData({ [selectedBen.id]: { amount: '', comment: '' } })
+                    setShowSinglePayoutModal(true)
+                  }}
+                  className={styles.submitBtn}
+                  style={{ flex: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  ⚡ Quick Payout
+                </button>
+              </div>
             </div>
 
             <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem', color: 'white' }}>
@@ -1432,6 +1570,102 @@ export default function Home() {
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {/* QUICK PAYOUT MODAL */}
+        {showSinglePayoutModal && selectedBen && (
+          <div className={styles.drawerOverlay} style={{ zIndex: 1000 }}>
+            <div className={styles.formCard} style={{ width: '400px', maxWidth: '90%' }}>
+              <h3 style={{ marginBottom: '1.5rem', fontWeight: '700' }}>⚡ Quick Payout</h3>
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold' }}>{selectedBen.name}</div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{selectedBen.account_number}</div>
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.label}>Amount (EGP)</label>
+                <input 
+                  type="number" 
+                  className={styles.inputField} 
+                  value={payoutFormData[selectedBen.id]?.amount || ''}
+                  onChange={(e) => setPayoutFormData({
+                    ...payoutFormData,
+                    [selectedBen.id]: { ...payoutFormData[selectedBen.id], amount: e.target.value }
+                  })}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.label}>Comment / Reference</label>
+                <input 
+                  type="text" 
+                  className={styles.inputField} 
+                  value={payoutFormData[selectedBen.id]?.comment || ''}
+                  onChange={(e) => setPayoutFormData({
+                    ...payoutFormData,
+                    [selectedBen.id]: { ...payoutFormData[selectedBen.id], comment: e.target.value }
+                  })}
+                  placeholder="e.g. June Services"
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+                <button className={styles.submitBtn} style={{ background: 'var(--surface-color)' }} onClick={() => setShowSinglePayoutModal(false)}>Cancel</button>
+                <button className={styles.submitBtn} onClick={handleSingleQuickPayout}>💾 Download ACH</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* GROUP PAYOUT MODAL */}
+        {showGroupPayoutModal && (
+          <div className={styles.drawerOverlay} style={{ zIndex: 1000, overflowY: 'auto', padding: '2rem' }}>
+            <div className={styles.formCard} style={{ width: '800px', maxWidth: '100%', margin: 'auto' }}>
+              <h3 style={{ marginBottom: '1.5rem', fontWeight: '700' }}>🚀 Group Payout ({selectedForPayout.length} Vendors)</h3>
+              
+              <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: '1rem' }}>
+                {selectedForPayout.map(ben => (
+                  <div key={ben.id} style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
+                    <div style={{ flex: 2 }}>
+                      <div style={{ fontWeight: 'bold' }}>{ben.name}</div>
+                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{ben.account_number}</div>
+                    </div>
+                    <div className={styles.formGroup} style={{ flex: 1, marginBottom: 0 }}>
+                      <label className={styles.label} style={{ fontSize: '0.75rem' }}>Amount</label>
+                      <input 
+                        type="number" 
+                        className={styles.inputField} 
+                        value={payoutFormData[ben.id]?.amount || ''}
+                        onChange={(e) => setPayoutFormData({
+                          ...payoutFormData,
+                          [ben.id]: { ...payoutFormData[ben.id], amount: e.target.value }
+                        })}
+                        placeholder="0.00"
+                        style={{ padding: '8px' }}
+                      />
+                    </div>
+                    <div className={styles.formGroup} style={{ flex: 1.5, marginBottom: 0 }}>
+                      <label className={styles.label} style={{ fontSize: '0.75rem' }}>Comment</label>
+                      <input 
+                        type="text" 
+                        className={styles.inputField} 
+                        value={payoutFormData[ben.id]?.comment || ''}
+                        onChange={(e) => setPayoutFormData({
+                          ...payoutFormData,
+                          [ben.id]: { ...payoutFormData[ben.id], comment: e.target.value }
+                        })}
+                        placeholder="e.g. Monthly Fee"
+                        style={{ padding: '8px' }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', justifyContent: 'flex-end' }}>
+                <button className={styles.submitBtn} style={{ background: 'var(--surface-color)', flex: 0, padding: '10px 20px' }} onClick={() => setShowGroupPayoutModal(false)}>Cancel</button>
+                <button className={styles.submitBtn} style={{ flex: 0, padding: '10px 20px', whiteSpace: 'nowrap' }} onClick={handleGroupQuickPayout}>🗜️ Export ZIP Archive</button>
+              </div>
+            </div>
           </div>
         )}
 
