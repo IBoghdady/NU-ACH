@@ -1010,35 +1010,35 @@ export default function Home() {
             onClick={() => setActiveView('dashboard')} 
             className={`${styles.navLink} ${activeView === 'dashboard' ? styles.active : ''}`}
           >
-            <span>📊</span> Dashboard Archive
+            <span>📊</span> Analytics
           </button>
 
           <button 
             onClick={() => setActiveView('transactions')} 
             className={`${styles.navLink} ${activeView === 'transactions' ? styles.active : ''}`}
           >
-            <span>🗃️</span> Transactions Archive
+            <span>🗃️</span> Transactions
           </button>
           
           <button 
             onClick={() => { setActiveView('beneficiaries'); fetchBeneficiaries(); }} 
             className={`${styles.navLink} ${activeView === 'beneficiaries' ? styles.active : ''}`}
           >
-            <span>👥</span> Beneficiary Directory
+            <span>👥</span> Beneficiaries
           </button>
           
           <button 
             onClick={() => setActiveView('import')} 
             className={`${styles.navLink} ${activeView === 'import' ? styles.active : ''}`}
           >
-            <span>📥</span> Database Upload
+            <span>📥</span> Transactions Upload
           </button>
 
           <button 
             onClick={() => setActiveView('payouts')} 
             className={`${styles.navLink} ${activeView === 'payouts' ? styles.active : ''}`}
           >
-            <span>📤</span> Bulk Payouts
+            <span>📤</span> Batch Payments
           </button>
           
           <div style={{ marginTop: 'auto' }}>
@@ -1156,7 +1156,7 @@ export default function Home() {
             <>
               <header className={styles.header}>
                 <div className={styles.titleGroup}>
-                  <h1>Treasury Dashboard</h1>
+                  <h1>Treasury Analytics</h1>
                   <p className={styles.subtitle}>Executive overview of outbound ACH payments</p>
                 </div>
               </header>
@@ -1251,7 +1251,7 @@ export default function Home() {
             <>
               <header className={styles.header}>
                 <div className={styles.titleGroup}>
-                  <h1>Transactions Archive</h1>
+                  <h1>Transactions</h1>
                   <p className={styles.subtitle}>Treasury Outbound ACH Payments Database (2019 - 2026)</p>
                 </div>
                 <button 
@@ -1393,7 +1393,7 @@ export default function Home() {
             <>
               <header className={styles.header}>
                 <div className={styles.titleGroup}>
-                  <h1>Beneficiary Directory</h1>
+                  <h1>Beneficiaries</h1>
                   <p className={styles.subtitle}>Verified supplier, contractor, and operational receiving accounts</p>
                 </div>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -1646,7 +1646,7 @@ export default function Home() {
             <>
               <header className={styles.header}>
                 <div className={styles.titleGroup}>
-                  <h1>Bulk Import Transactions</h1>
+                  <h1>Transactions Upload</h1>
                   <p className={styles.subtitle}>Upload ACH settlement reports securely</p>
                 </div>
               </header>
@@ -1809,7 +1809,7 @@ export default function Home() {
           <div className={styles.dashboardContainer} style={{ animation: 'fadeIn 0.3s ease-out' }}>
             <div className={styles.header}>
               <div>
-                <h1 className={styles.title}>Bulk Payout Generator</h1>
+                <h1 className={styles.title}>Batch Payments</h1>
                 <p className={styles.subtitle}>Upload simple payroll sheets to instantly generate fully compliant ACH forms.</p>
               </div>
             </div>
