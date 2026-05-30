@@ -1462,86 +1462,114 @@ export default function Home() {
               </div>
             </div>
 
-            <div className={styles.filtersSection} style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-              <div style={{ display: 'flex', gap: '20px', width: '100%', alignItems: 'center' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <label className={styles.filterLabel} style={{ marginBottom: 0 }}>1. Upload Simplified Data (.xlsx or .csv)</label>
+            <div className={styles.tableCard} style={{ display: 'flex', flexDirection: 'column', padding: '2rem', border: 'none', background: 'rgba(255,255,255,0.02)', marginTop: '2rem' }}>
+              <div style={{ display: 'flex', gap: '2rem', alignItems: 'stretch', flexWrap: 'wrap' }}>
+                
+                {/* Upload Zone */}
+                <div style={{ flex: '1', minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ fontSize: '1.25rem', color: 'white', margin: 0, fontWeight: '700' }}>Step 1: Upload Data</h3>
                     <button 
                       onClick={downloadPayoutTemplate}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--primary)',
-                        cursor: 'pointer',
-                        fontSize: '0.85rem',
-                        textDecoration: 'underline',
-                        padding: 0
-                      }}
+                      style={{ background: 'none', border: 'none', color: 'var(--accent-color)', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'bold' }}
                     >
                       📥 Download Template
                     </button>
                   </div>
-                  <input 
-                    type="file" 
-                    accept=".xlsx, .xls, .csv" 
-                    onChange={handlePayoutFileUpload}
-                    style={{ 
-                      padding: '10px', 
-                      background: 'rgba(255,255,255,0.05)', 
-                      border: '1px dashed rgba(255,255,255,0.2)', 
-                      borderRadius: '8px',
-                      color: 'var(--text-secondary)',
-                      width: '100%',
-                      cursor: 'pointer'
-                    }} 
-                  />
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '8px' }}>
-                    Required Columns: <strong>Employee ID</strong>, <strong>Amount</strong>, <strong>Comment</strong>
+                  
+                  <div style={{ 
+                    position: 'relative',
+                    padding: '3rem 2rem', 
+                    background: 'rgba(59, 130, 246, 0.05)', 
+                    border: '2px dashed rgba(59, 130, 246, 0.3)', 
+                    borderRadius: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    flex: 1
+                  }}>
+                    <input 
+                      type="file" 
+                      accept=".xlsx, .xls, .csv" 
+                      onChange={handlePayoutFileUpload}
+                      style={{ 
+                        position: 'absolute',
+                        top: 0, left: 0, width: '100%', height: '100%',
+                        opacity: 0,
+                        cursor: 'pointer'
+                      }} 
+                    />
+                    <div style={{ fontSize: '3rem', marginBottom: '1rem', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.3))' }}>📄</div>
+                    <div style={{ fontSize: '1.1rem', color: 'white', fontWeight: 'bold', marginBottom: '0.5rem' }}>Drag & Drop your file here</div>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>or click to browse (.xlsx, .csv)</div>
+                    <div style={{ marginTop: '1.5rem', background: 'rgba(255,255,255,0.05)', padding: '0.75rem 1.25rem', borderRadius: '8px', fontSize: '0.85rem', color: '#cbd5e1', border: '1px solid rgba(255,255,255,0.1)' }}>
+                      Required columns: <strong style={{ color: 'white' }}>Employee ID</strong>, <strong style={{ color: 'white' }}>Amount</strong>, <strong style={{ color: 'white' }}>Comment</strong>
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {isPayoutProcessing && <div style={{ color: 'var(--primary)', fontWeight: 'bold' }}>⏳ Processing Database Match...</div>}
-                  {!isPayoutProcessing && payoutStats && (
-                    <div style={{ display: 'flex', gap: '20px' }}>
-                      <div className={styles.kpiCard} style={{ padding: '15px' }}>
-                        <div className={styles.kpiLabel}>Total Rows</div>
-                        <div className={styles.kpiValue} style={{ fontSize: '1.2rem' }}>{payoutStats.total}</div>
+                {/* Status & Export Zone */}
+                <div style={{ flex: '1', minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <h3 style={{ fontSize: '1.25rem', color: 'white', margin: 0, fontWeight: '700' }}>Step 2: Review & Export</h3>
+                  
+                  <div style={{ 
+                    background: 'rgba(15, 23, 42, 0.6)', 
+                    border: '1px solid var(--border-color)', 
+                    borderRadius: '16px', 
+                    padding: '1.5rem',
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.2)'
+                  }}>
+                    {isPayoutProcessing ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                        <div className={styles.spinner} style={{ marginBottom: '1rem' }}></div>
+                        <div style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>Matching Beneficiaries...</div>
                       </div>
-                      <div className={styles.kpiCard} style={{ padding: '15px', borderBottom: '3px solid #10b981' }}>
-                        <div className={styles.kpiLabel}>Matched Beneficiaries</div>
-                        <div className={styles.kpiValue} style={{ fontSize: '1.2rem', color: '#10b981' }}>{payoutStats.matched}</div>
+                    ) : !payoutStats ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '2.5rem', marginBottom: '1rem', opacity: 0.5 }}>🔍</div>
+                        <div style={{ fontSize: '1.05rem' }}>Upload a file to see validation results.</div>
                       </div>
-                      <div className={styles.kpiCard} style={{ padding: '15px', borderBottom: payoutStats.missing > 0 ? '3px solid #ef4444' : '3px solid #334155' }}>
-                        <div className={styles.kpiLabel}>Missing Details</div>
-                        <div className={styles.kpiValue} style={{ fontSize: '1.2rem', color: payoutStats.missing > 0 ? '#ef4444' : 'white' }}>{payoutStats.missing}</div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', alignItems: 'center' }}>
+                          <span style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Total Rows Scanned</span>
+                          <span style={{ fontWeight: '800', color: 'white', fontSize: '1.2rem' }}>{payoutStats.total}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '12px', alignItems: 'center' }}>
+                          <span style={{ color: '#10b981', fontWeight: '600' }}>Ready for Payout</span>
+                          <span style={{ fontWeight: '800', color: '#10b981', fontSize: '1.2rem' }}>{payoutStats.matched}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', background: payoutStats.missing > 0 ? 'rgba(239, 68, 68, 0.05)' : 'rgba(255,255,255,0.03)', border: payoutStats.missing > 0 ? '1px solid rgba(239, 68, 68, 0.2)' : 'none', borderRadius: '12px', alignItems: 'center' }}>
+                          <span style={{ color: payoutStats.missing > 0 ? '#ef4444' : 'var(--text-secondary)', fontWeight: '600' }}>Missing/Errors</span>
+                          <span style={{ fontWeight: '800', color: payoutStats.missing > 0 ? '#ef4444' : 'white', fontSize: '1.2rem' }}>{payoutStats.missing}</span>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
+                    )}
 
-                <div style={{ flex: 0 }}>
-                  <button 
-                    onClick={exportPayoutToExcel}
-                    disabled={!payoutPreview.length}
-                    style={{
-                      background: payoutPreview.length ? 'var(--primary)' : '#334155',
-                      color: 'white',
-                      border: 'none',
-                      padding: '12px 24px',
-                      borderRadius: '8px',
-                      cursor: payoutPreview.length ? 'pointer' : 'not-allowed',
-                      fontWeight: 'bold',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      fontSize: '1rem',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    <span>💾</span> Export ACH Form
-                  </button>
+                    <button 
+                      onClick={exportPayoutToExcel}
+                      disabled={!payoutPreview.length}
+                      className={styles.submitBtn}
+                      style={{
+                        marginTop: '1.5rem',
+                        background: payoutPreview.length ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : '#334155',
+                        boxShadow: payoutPreview.length ? '0 4px 15px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)' : 'none',
+                        color: payoutPreview.length ? 'white' : '#94a3b8',
+                        opacity: payoutPreview.length ? 1 : 0.5,
+                        fontSize: '1.05rem',
+                        padding: '1rem'
+                      }}
+                    >
+                      <span style={{ marginRight: '0.5rem' }}>💾</span> Generate ACH Form
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
