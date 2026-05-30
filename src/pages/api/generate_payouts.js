@@ -47,7 +47,7 @@ export default async function handler(req, res) {
         TransactionID: index + 1,
         CreditorName: ben.name || '',
         CreditorAccountNumber: ben.account_number || '',
-        CreditorBank: ben.bank_bic || '',
+        CreditorBank: ben.bank_bic || 'CIBEEGCX',
         CreditorBankBranch: '',
         TransactionAmount: row.amount || 0,
         TransactionPurpose: 'CASH', // Standard ACH purpose
