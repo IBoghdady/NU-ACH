@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     // Fetch all matching beneficiaries from Supabase in one query
     const { data: beneficiaries, error } = await supabase
       .from('beneficiaries')
-      .select('employee_code, name, account_number, bank_name')
+      .select('employee_code, name, account_number, bank_bic')
       .in('employee_code', employeeIds)
 
     if (error) {
@@ -47,7 +47,7 @@ export default async function handler(req, res) {
         TransactionID: index + 1,
         CreditorName: ben.name || '',
         CreditorAccountNumber: ben.account_number || '',
-        CreditorBank: ben.bank_name || '',
+        CreditorBank: ben.bank_bic || '',
         CreditorBankBranch: '',
         TransactionAmount: row.amount || 0,
         TransactionPurpose: 'CASH', // Standard ACH purpose
