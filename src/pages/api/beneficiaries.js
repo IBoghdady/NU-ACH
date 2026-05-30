@@ -25,20 +25,39 @@ export default async function handler(req, res) {
       if (search.trim()) {
         const term = `%${search.trim()}%`
         query = query.or(`name.ilike.${term},account_number.ilike.${term}`)
+        // Fetch more for search so we can sort by relevance in JS
+        query = query.limit(1000)
+      } else {
+        query = query.order('name', { ascending: true }).range(from, to)
       }
 
       if (employeeCode.trim()) {
         query = query.eq('employee_code', employeeCode.trim())
       }
 
-      // Order alphabetically by name
-      query = query
-        .order('name', { ascending: true })
-        .range(from, to)
+      let { data: beneficiaries, count, error } = await query
 
-      const { data: beneficiaries, count, error } = await query
+      if (error) {
+        throw error
+      }
 
-      if (error) throw error
+      // If searching, sort by exact prefix match first, then alphabetically, then paginate manually
+      if (search.trim() && beneficiaries) {
+        const lowerSearch = search.toLowerCase().trim()
+        beneficiaries.sort((a, b) => {
+          const aName = (a.name || '').toLowerCase()
+          const bName = (b.name || '').toLowerCase()
+          
+          const aStarts = aName.startsWith(lowerSearch) ? 1 : 0
+          const bStarts = bName.startsWith(lowerSearch) ? 1 : 0
+          
+          if (aStarts !== bStarts) {
+             return bStarts - aStarts // Put exact prefix matches at the very top
+          }
+          return aName.localeCompare(bName) // Otherwise alphabetical
+        })
+        beneficiaries = beneficiaries.slice(from, from + limitNum)
+      }
 
       return res.status(200).json({
         beneficiaries,
