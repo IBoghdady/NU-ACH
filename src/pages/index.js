@@ -497,10 +497,42 @@ export default function Home() {
 
   const exportAllBeneficiaries = async () => {
     try {
-      const { data, error } = await supabase.from('beneficiaries').select('*').order('name', { ascending: true })
-      if (error) throw error
-      if (!data || data.length === 0) return alert('No beneficiaries found.')
-      const ws = XLSX.utils.json_to_sheet(data)
+      let allData = []
+      let from = 0
+      const limit = 1000
+      let hasMore = true
+      
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('beneficiaries')
+          .select('name, account_number, bank_bic, employee_code, category')
+          .order('name', { ascending: true })
+          .range(from, from + limit - 1)
+          
+        if (error) throw error
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...data]
+          from += limit
+        }
+        
+        if (!data || data.length < limit) {
+          hasMore = false
+        }
+      }
+
+      if (allData.length === 0) return alert('No beneficiaries found.')
+      
+      // Rename keys for better Excel headers
+      const formattedData = allData.map(row => ({
+        "Name": row.name,
+        "Account Number": row.account_number,
+        "BIC": row.bank_bic || '',
+        "Employee Code": row.employee_code || '',
+        "Category": row.category || ''
+      }))
+
+      const ws = XLSX.utils.json_to_sheet(formattedData)
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, "Beneficiaries")
       XLSX.writeFile(wb, `NU_Beneficiaries_${new Date().toISOString().slice(0, 10)}.xlsx`)
