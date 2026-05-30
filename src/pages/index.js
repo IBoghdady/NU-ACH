@@ -6,6 +6,8 @@ import { supabase } from '../lib/supabaseClient'
 import TransactionReceipt from '../components/TransactionReceipt'
 import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
+import toast from 'react-hot-toast'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
 
 export default function Home() {
   // Authentication State
@@ -58,7 +60,7 @@ export default function Home() {
 
   const handleGeneratePDF = (tx) => {
     if (typeof window === 'undefined' || !window.html2pdf) {
-      alert('PDF Engine is still loading, please wait a moment.')
+      toast.error('PDF Engine is still loading, please wait a moment.')
       return
     }
     setReceiptTx(tx)
@@ -125,11 +127,11 @@ export default function Home() {
           setPayoutPreview(result.data)
           setPayoutStats(result.stats)
         } else {
-          alert('Error processing file: ' + result.error)
+          toast.error('Error processing file: ' + result.error)
         }
       } catch (err) {
         console.error(err)
-        alert('Error parsing file. Please ensure it is a valid Excel or CSV file.')
+        toast.error('Error parsing file. Please ensure it is a valid Excel or CSV file.')
       } finally {
         setIsPayoutProcessing(false)
       }
@@ -187,7 +189,7 @@ export default function Home() {
 
   const handleSingleQuickPayout = () => {
     const { amount, comment } = payoutFormData[selectedBen.id] || {}
-    if (!amount) return alert('Please enter an amount.')
+    if (!amount) return toast.error('Please enter an amount.')
     
     const row = generateACHRow(selectedBen, amount, comment)
     const ws = XLSX.utils.json_to_sheet([row])
@@ -200,7 +202,7 @@ export default function Home() {
   const handleGroupQuickPayout = async () => {
     for (const ben of selectedForPayout) {
       const { amount } = payoutFormData[ben.id] || {}
-      if (!amount) return alert(`Please enter an amount for ${ben.name}`)
+      if (!amount) return toast.error(`Please enter an amount for ${ben.name}`)
     }
 
     const zip = new JSZip()
@@ -251,8 +253,26 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true)
   const [isExporting, setIsExporting] = useState(false)
   const [dashboardError, setDashboardError] = useState('')
+  const [analyticsData, setAnalyticsData] = useState({ topVendors: [], dailyOutflows: [] })
+  
+  useEffect(() => {
+    if (activeView === 'dashboard') {
+      const fetchAnalytics = async () => {
+        try {
+          const res = await fetch('/api/analytics')
+          if (res.ok) {
+            const data = await res.json()
+            setAnalyticsData({ topVendors: data.topVendors || [], dailyOutflows: data.dailyOutflows || [] })
+          }
+        } catch (e) {
+          console.error(e)
+        }
+      }
+      fetchAnalytics()
+    }
+  }, [activeView])
 
-  // Fetch Dashboard Transactions
+  // --- Functions ---Dashboard Transactions
   const fetchDashboardData = async () => {
     setIsLoading(true)
     setDashboardError('')
@@ -356,7 +376,7 @@ export default function Home() {
       }
 
       if (allRows.length === 0) {
-        alert('No data matches the current filters to export!')
+        toast.error('No data matches the current filters to export!')
         return
       }
 
@@ -449,7 +469,7 @@ export default function Home() {
 
     } catch (err) {
       console.error(err)
-      alert('Failed to export to Excel. Please try again.')
+      toast.error('Failed to export to Excel. Please try again.')
     } finally {
       setIsExporting(false)
     }
@@ -486,6 +506,10 @@ export default function Home() {
   const [bulkConflicts, setBulkConflicts] = useState([]) // array of { newRow, existingRow, action: 'skip' | 'update' }
   const [bulkNewBens, setBulkNewBens] = useState([])
   const [isBulkProcessing, setIsBulkProcessing] = useState(false)
+  
+  // Quick Add State
+  const [showQuickAddModal, setShowQuickAddModal] = useState(false)
+  const [quickAddRow, setQuickAddRow] = useState(null)
 
   const downloadBulkRegistrationTemplate = () => {
     const templateData = [{ "Name": "John Doe", "Account Number": "123456789", "BIC": "CIBEEGCX", "Employee Code": "EMP-123", "Category": "Operational" }]
@@ -521,7 +545,7 @@ export default function Home() {
         }
       }
 
-      if (allData.length === 0) return alert('No beneficiaries found.')
+      if (allData.length === 0) return toast.error('No beneficiaries found.')
       
       // Rename keys for better Excel headers
       const formattedData = allData.map(row => ({
@@ -538,7 +562,7 @@ export default function Home() {
       XLSX.writeFile(wb, `NU_Beneficiaries_${new Date().toISOString().slice(0, 10)}.xlsx`)
     } catch (err) {
       console.error(err)
-      alert('Failed to export beneficiaries.')
+      toast.error('Failed to export beneficiaries.')
     }
   }
 
@@ -611,7 +635,7 @@ export default function Home() {
         }
       } catch (err) {
         console.error(err)
-        alert('Failed to process bulk upload: ' + err.message)
+        toast.error('Failed to process bulk upload: ' + err.message)
       } finally {
         setIsBulkProcessing(false)
         e.target.value = '' // reset input
@@ -640,12 +664,67 @@ export default function Home() {
         if (updateErr) throw updateErr
       }
 
-      alert(`Successfully registered ${newBens.length} new and updated ${updates.length} existing beneficiaries.`)
+      toast.success(`Successfully registered ${newBens.length} new and updated ${updates.length} existing beneficiaries.`)
       setShowBulkConflictModal(false)
       fetchBeneficiaries()
     } catch (err) {
       console.error(err)
-      alert('Database execution failed: ' + err.message)
+      toast.error('Database execution failed: ' + err.message)
+    } finally {
+      setIsBulkProcessing(false)
+    }
+  }
+
+  const handleOpenQuickAdd = (row) => {
+    setQuickAddRow(row)
+    setNewBenName(row.CreditorName || '')
+    setNewBenAcc(row.CreditorAccountNumber || '')
+    setNewBenEmpCode(row._originalEmployeeId || '')
+    setNewBenBic(row.CreditorBank || '')
+    setNewBenCategory('Operational')
+    setShowQuickAddModal(true)
+  }
+
+  const handleQuickAddSubmit = async (e) => {
+    e.preventDefault()
+    if (!newBenName || !newBenAcc) return toast.error('Please fill out Name and Account.')
+    
+    setIsBulkProcessing(true)
+    try {
+      const benObj = {
+        name: newBenName.trim(),
+        account_number: newBenAcc.trim(),
+        bank_bic: newBenBic?.trim() || null,
+        category: newBenCategory,
+        employee_code: newBenEmpCode?.trim() || null
+      }
+
+      const { data, error } = await supabase.from('beneficiaries').insert([benObj]).select().single()
+      if (error) throw error
+      
+      toast.success(`Registered ${newBenName}!`)
+      
+      const updatedPreview = payoutPreview.map(r => {
+        if (r.id === quickAddRow.id) {
+           r._status = 'Matched'
+           r.CreditorName = data.name
+           r.CreditorAccountNumber = data.account_number
+           r.CreditorBank = data.bank_bic || ''
+        }
+        return r
+      })
+      setPayoutPreview(updatedPreview)
+      
+      setPayoutStats(prev => ({
+        ...prev,
+        ready: prev.ready + 1,
+        missing: prev.missing - 1
+      }))
+
+      setShowQuickAddModal(false)
+      setQuickAddRow(null)
+    } catch (error) {
+      toast.error(error.message || 'Failed to quick add beneficiary.')
     } finally {
       setIsBulkProcessing(false)
     }
@@ -711,7 +790,7 @@ export default function Home() {
         throw new Error(data.error || 'Failed to register beneficiary.')
       }
 
-      setBenFormSuccess(`Beneficiary "${newBenName}" registered successfully!`)
+      toast.success(`Beneficiary "${newBenName}" registered successfully!`); setShowAddBen(false)
       setNewBenName('')
       setNewBenAcc('')
       setNewBenBic('')
@@ -758,7 +837,7 @@ export default function Home() {
       if (error) throw error
 
       if (!allRows || allRows.length === 0) {
-        alert('No past transactions found to export for this specific account.')
+        toast.error('No past transactions found to export for this specific account.')
         return
       }
 
@@ -847,7 +926,7 @@ export default function Home() {
 
     } catch (err) {
       console.error(err)
-      alert('Failed to export ledger. Please try again.')
+      toast.error('Failed to export ledger. Please try again.')
     } finally {
       setIsExporting(false)
     }
@@ -1037,12 +1116,54 @@ export default function Home() {
                 <div className={`${styles.kpiCard} ${styles.kpiError}`}>
                   <div className={styles.kpiHeader}>
                     <span className={styles.kpiTitle}>Rejected Transactions</span>
-                    <span className={styles.kpiIcon}>🚫</span>
+                    <span className={styles.kpiIcon}>❌</span>
                   </div>
                   <div className={styles.kpiValue}>{stats.rejectedCount.toLocaleString()}</div>
-                  <div className={styles.kpiTrend}>Validation errors / failed balances</div>
+                  <div className={styles.kpiTrend}>Blocked by fraud checks</div>
                 </div>
               </section>
+
+              {/* Analytics Charts */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+                <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.5rem' }}>
+                  <h3 style={{ marginBottom: '1rem', fontWeight: '600' }}>30-Day Cash Outflow (EGP)</h3>
+                  <div style={{ width: '100%', height: '300px' }}>
+                    <ResponsiveContainer>
+                      <LineChart data={analyticsData.dailyOutflows} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                        <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} tickFormatter={(tick) => tick.substring(5)} />
+                        <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={(tick) => `£${(tick/1000).toFixed(0)}k`} />
+                        <RechartsTooltip 
+                          contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                          formatter={(value) => [formatEGP(value), 'Amount']}
+                          labelStyle={{ color: '#94a3b8', marginBottom: '0.5rem' }}
+                        />
+                        <Line type="monotone" dataKey="amount" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, fill: '#1e293b', stroke: '#3b82f6', strokeWidth: 2 }} activeDot={{ r: 6, fill: '#3b82f6' }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.5rem' }}>
+                  <h3 style={{ marginBottom: '1rem', fontWeight: '600' }}>Top 5 Payees by Volume</h3>
+                  <div style={{ width: '100%', height: '300px' }}>
+                    <ResponsiveContainer>
+                      <BarChart data={analyticsData.topVendors} layout="vertical" margin={{ top: 5, right: 30, left: 5, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" horizontal={false} />
+                        <XAxis type="number" stroke="#94a3b8" fontSize={12} tickFormatter={(tick) => `£${(tick/1000).toFixed(0)}k`} />
+                        <YAxis dataKey="name" type="category" stroke="#94a3b8" fontSize={12} width={120} tick={{ fill: '#e2e8f0' }} />
+                        <RechartsTooltip 
+                          contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                          formatter={(value) => [formatEGP(value), 'Total Paid']}
+                          labelStyle={{ display: 'none' }}
+                          cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                        />
+                        <Bar dataKey="value" fill="#10b981" radius={[0, 4, 4, 0]} barSize={24} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
 
               {/* Search & Filters Controls */}
               <section className={styles.filterSection} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
@@ -1504,7 +1625,7 @@ export default function Home() {
                 <div style={{ fontSize: '3rem', margin: '1rem' }}>📤</div>
                 <h3 style={{ marginBottom: '0.5rem', color: 'white' }}>Drag & Drop Excel/CSV File</h3>
                 <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>Supported formats: .xls, .xlsx, .csv</p>
-                <button className={styles.submitBtn} onClick={() => alert('Backend parsing logic is required for Excel files. Currently data is loaded via the python bulk-uploader.')}>
+                <button className={styles.submitBtn} onClick={() => toast.error('Backend parsing logic is required for Excel files. Currently data is loaded via the python bulk-uploader.')}>
                   Select File to Upload
                 </button>
               </div>
@@ -1804,7 +1925,15 @@ export default function Home() {
                           {row._status === 'Matched' ? (
                             <span className={`${styles.statusBadge} ${styles.statusAccepted}`}>Matched</span>
                           ) : (
-                            <span className={`${styles.statusBadge} ${styles.statusRejected}`}>Missing Details</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span className={`${styles.statusBadge} ${styles.statusRejected}`}>Missing Details</span>
+                              <button 
+                                onClick={() => handleOpenQuickAdd(row)}
+                                style={{ padding: '2px 8px', fontSize: '0.75rem', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                              >
+                                Quick Register
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -1983,6 +2112,89 @@ export default function Home() {
                   {isBulkProcessing ? 'Processing...' : 'Confirm & Import'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quick Add Modal */}
+        {showQuickAddModal && (
+          <div className={styles.drawerOverlay} style={{ zIndex: 1100, overflowY: 'auto', padding: '2rem' }} onClick={(e) => e.target === e.currentTarget && setShowQuickAddModal(false)}>
+            <div className={styles.formCard} style={{ width: '600px', maxWidth: '100%', margin: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: '800' }}>⚡ Quick Register Beneficiary</h2>
+                <button onClick={() => setShowQuickAddModal(false)} className={styles.closeBtn}>×</button>
+              </div>
+              
+              <form onSubmit={handleQuickAddSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                  <label className={styles.label}>Beneficiary / Creditor Name *</label>
+                  <input 
+                    type="text" 
+                    value={newBenName} 
+                    onChange={(e) => setNewBenName(e.target.value)} 
+                    className={styles.inputField}
+                    placeholder="e.g. John Doe"
+                    required 
+                  />
+                </div>
+                
+                <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                  <label className={styles.label}>Account Number / IBAN *</label>
+                  <input 
+                    type="text" 
+                    value={newBenAcc} 
+                    onChange={(e) => setNewBenAcc(e.target.value)} 
+                    className={styles.inputField}
+                    placeholder="e.g. 100069899654"
+                    required 
+                  />
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                  <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                    <label className={styles.label}>Employee Code (Optional)</label>
+                    <input 
+                      type="text" 
+                      value={newBenEmpCode} 
+                      onChange={(e) => setNewBenEmpCode(e.target.value)} 
+                      className={styles.inputField}
+                      placeholder="e.g. EMP-123"
+                    />
+                  </div>
+                  <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                    <label className={styles.label}>Bank BIC (Optional)</label>
+                    <input 
+                      type="text" 
+                      value={newBenBic} 
+                      onChange={(e) => setNewBenBic(e.target.value)} 
+                      className={styles.inputField}
+                      placeholder="e.g. CIBEEGCX"
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                  <label className={styles.label}>Category *</label>
+                  <select 
+                    value={newBenCategory} 
+                    onChange={(e) => setNewBenCategory(e.target.value)} 
+                    className={styles.selectInput}
+                  >
+                    <option value="Operational">Operational Expenses</option>
+                    <option value="Construction">Infrastructure & Construction</option>
+                    <option value="Utilities">Utilities & Energy</option>
+                    <option value="Insurance">Medical & Corporate Insurance</option>
+                    <option value="Staff">Staff & Salaries</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
+                  <button type="button" className={styles.submitBtn} style={{ background: 'var(--surface-color)', flex: 0, padding: '10px 20px', boxShadow: 'none' }} onClick={() => setShowQuickAddModal(false)}>Cancel</button>
+                  <button type="submit" className={styles.submitBtn} style={{ flex: 0, padding: '10px 20px', whiteSpace: 'nowrap' }} disabled={isBulkProcessing}>
+                    {isBulkProcessing ? 'Registering...' : 'Register & Resolve'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
