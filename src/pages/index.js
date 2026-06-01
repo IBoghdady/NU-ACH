@@ -1878,18 +1878,27 @@ export default function Home() {
               </header>
 
               {!importFile ? (
-                <div className={styles.tableCard} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem', border: '2px dashed var(--border-color)', background: 'rgba(255,255,255,0.01)', position: 'relative' }}>
+                <div 
+                  className={styles.tableCard} 
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem', border: '2px dashed var(--border-color)', background: 'rgba(255,255,255,0.01)', position: 'relative', cursor: 'pointer' }}
+                  onClick={() => document.getElementById('transaction-upload-input').click()}
+                >
                   <input
+                    id="transaction-upload-input"
                     type="file"
                     accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                     onChange={handleTransactionFileUpload}
-                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 10 }}
+                    style={{ display: 'none' }}
                     disabled={isImporting}
                   />
                   <div style={{ fontSize: '3rem', margin: '1rem' }}>📤</div>
                   <h3 style={{ marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Drag & Drop Excel/CSV File</h3>
                   <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>Supported formats: .xls, .xlsx, .csv</p>
-                  <button className={styles.submitBtn} disabled={isImporting}>
+                  <button 
+                    className={styles.submitBtn} 
+                    disabled={isImporting}
+                    onClick={(e) => { e.stopPropagation(); document.getElementById('transaction-upload-input').click(); }}
+                  >
                     {isImporting ? 'Processing...' : 'Select File to Upload'}
                   </button>
                 </div>
@@ -2146,30 +2155,29 @@ export default function Home() {
                     </button>
                   </div>
                   
-                  <div style={{ 
-                    position: 'relative',
-                    padding: '3rem 2rem', 
-                    background: 'rgba(59, 130, 246, 0.05)', 
-                    border: '2px dashed rgba(59, 130, 246, 0.3)', 
-                    borderRadius: '16px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    flex: 1
-                  }}>
+                  <div 
+                    style={{ 
+                      position: 'relative',
+                      padding: '3rem 2rem', 
+                      background: 'rgba(59, 130, 246, 0.05)', 
+                      border: '2px dashed rgba(59, 130, 246, 0.3)', 
+                      borderRadius: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      flex: 1
+                    }}
+                    onClick={() => document.getElementById('payout-upload-input').click()}
+                  >
                     <input 
+                      id="payout-upload-input"
                       type="file" 
                       accept=".xlsx, .xls, .csv" 
                       onChange={handlePayoutFileUpload}
-                      style={{ 
-                        position: 'absolute',
-                        top: 0, left: 0, width: '100%', height: '100%',
-                        opacity: 0,
-                        cursor: 'pointer'
-                      }} 
+                      style={{ display: 'none' }} 
                     />
                     <div style={{ fontSize: '3rem', marginBottom: '1rem', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.3))' }}>📄</div>
                     <div style={{ fontSize: '1.1rem', color: 'white', fontWeight: 'bold', marginBottom: '0.5rem' }}>Drag & Drop your file here</div>
