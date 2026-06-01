@@ -300,7 +300,7 @@
   border: 1px solid var(--border-color);
   padding: 0.85rem 1rem 0.85rem 2.75rem;
   border-radius: 12px;
-  color: white;
+  color: var(--text-primary);
   font-family: inherit;
   font-size: 0.9rem;
   transition: all 0.2s ease;
@@ -328,7 +328,7 @@
   border: 1px solid var(--border-color);
   padding: 0.85rem 1rem;
   border-radius: 12px;
-  color: white;
+  color: var(--text-primary);
   font-family: inherit;
   font-size: 0.9rem;
   cursor: pointer;
@@ -347,7 +347,7 @@
   border: 1px solid var(--border-color);
   padding: 0.85rem 1rem;
   border-radius: 12px;
-  color: white;
+  color: var(--text-primary);
   font-family: inherit;
   font-size: 0.9rem;
   transition: all 0.2s ease;
@@ -535,7 +535,7 @@
 .benName {
   font-weight: 700;
   font-size: 1.05rem;
-  color: white;
+  color: var(--text-primary);
   margin-bottom: 0.35rem;
 }
 
@@ -566,7 +566,7 @@
 .benValue {
   font-family: monospace;
   font-size: 0.85rem;
-  color: white;
+  color: var(--text-primary);
   margin-bottom: 0.75rem;
 }
 
@@ -661,7 +661,7 @@
 }
 
 .drawerClose:hover {
-  color: white;
+  color: var(--text-primary);
 }
 
 .drawerMeta {
@@ -705,7 +705,7 @@
   border: 1px solid var(--border-color);
   padding: 0.85rem 1rem;
   border-radius: 12px;
-  color: white;
+  color: var(--text-primary);
   font-family: inherit;
   font-size: 0.95rem;
   transition: all 0.2s;
@@ -931,7 +931,7 @@
 
 .copyBtn:hover {
   background: var(--bg-hover);
-  color: white;
+  color: var(--text-primary);
   border-color: var(--border-color);
 }
 
