@@ -1877,7 +1877,7 @@ export default function Home() {
                     type="file"
                     accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                     onChange={handleTransactionFileUpload}
-                    style={{ position: 'absolute', width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 10 }}
                     disabled={isImporting}
                   />
                   <div style={{ fontSize: '3rem', margin: '1rem' }}>📤</div>
