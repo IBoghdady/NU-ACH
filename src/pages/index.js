@@ -533,6 +533,7 @@ export default function Home() {
   const [newBenName, setNewBenName] = useState('')
   const [newBenAcc, setNewBenAcc] = useState('')
   const [newBenBic, setNewBenBic] = useState('')
+  const [newBenEmpCode, setNewBenEmpCode] = useState('')
   const [newBenCategory, setNewBenCategory] = useState('Operational')
   const [benFormSuccess, setBenFormSuccess] = useState('')
   const [benFormError, setBenFormError] = useState('')
@@ -809,12 +810,17 @@ export default function Home() {
       return
     }
 
+    const cleanedRows = validRows.map(row => {
+      const { id, status, errors, ...dbRow } = row
+      return dbRow
+    })
+
     setIsImporting(true)
     try {
       const res = await fetch('/api/bulk_import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactions: validRows })
+        body: JSON.stringify({ transactions: cleanedRows })
       })
 
       const result = await res.json()
