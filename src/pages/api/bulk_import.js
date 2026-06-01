@@ -66,4 +66,4 @@ export default async function handler(req, res) {
   }
 }
 
-// Vercel bundle update
+/* Vercel bundle update */
