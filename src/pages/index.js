@@ -1172,7 +1172,7 @@ export default function Home() {
             <button type="submit" disabled={isAuthLoading} style={{ 
               marginTop: '1rem', 
               background: 'var(--accent-color)', 
-              color: '#ffffff', 
+              color: 'var(--text-primary)', 
               border: 'none', 
               padding: '14px', 
               borderRadius: '12px', 
@@ -1430,40 +1430,40 @@ export default function Home() {
 
               {/* Analytics Charts */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
-                <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.5rem' }}>
+                <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.5rem' }}>
                   <h3 style={{ marginBottom: '1rem', fontWeight: '600' }}>30-Day Cash Outflow (EGP)</h3>
                   <div style={{ width: '100%', height: '300px' }}>
                     <ResponsiveContainer>
                       <LineChart data={analyticsData.dailyOutflows} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
-                        <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} tickFormatter={(tick) => tick.substring(5)} />
-                        <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={(tick) => `£${(tick/1000).toFixed(0)}k`} />
+                        <XAxis dataKey="date" stroke="var(--text-secondary)" fontSize={12} tickFormatter={(tick) => tick.substring(5)} />
+                        <YAxis stroke="var(--text-secondary)" fontSize={12} tickFormatter={(tick) => `£${(tick/1000).toFixed(0)}k`} />
                         <RechartsTooltip 
-                          contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                          contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px' }}
                           formatter={(value) => [formatEGP(value), 'Amount']}
-                          labelStyle={{ color: '#94a3b8', marginBottom: '0.5rem' }}
+                          labelStyle={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}
                         />
-                        <Line type="monotone" dataKey="amount" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, fill: '#1e293b', stroke: '#3b82f6', strokeWidth: 2 }} activeDot={{ r: 6, fill: '#3b82f6' }} />
+                        <Line type="monotone" dataKey="amount" stroke="var(--accent-color)" strokeWidth={3} dot={{ r: 4, fill: '#1e293b', stroke: '#3b82f6', strokeWidth: 2 }} activeDot={{ r: 6, fill: '#3b82f6' }} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
 
-                <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.5rem' }}>
+                <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.5rem' }}>
                   <h3 style={{ marginBottom: '1rem', fontWeight: '600' }}>Top 5 Payees by Volume</h3>
                   <div style={{ width: '100%', height: '300px' }}>
                     <ResponsiveContainer>
                       <BarChart data={analyticsData.topVendors} layout="vertical" margin={{ top: 5, right: 30, left: 5, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" horizontal={false} />
-                        <XAxis type="number" stroke="#94a3b8" fontSize={12} tickFormatter={(tick) => `£${(tick/1000).toFixed(0)}k`} />
-                        <YAxis dataKey="name" type="category" stroke="#94a3b8" fontSize={12} width={120} tick={{ fill: '#e2e8f0' }} />
+                        <XAxis type="number" stroke="var(--text-secondary)" fontSize={12} tickFormatter={(tick) => `£${(tick/1000).toFixed(0)}k`} />
+                        <YAxis dataKey="name" type="category" stroke="var(--text-secondary)" fontSize={12} width={120} tick={{ fill: 'var(--text-secondary)' }} />
                         <RechartsTooltip 
-                          contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                          contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px' }}
                           formatter={(value) => [formatEGP(value), 'Total Paid']}
                           labelStyle={{ display: 'none' }}
-                          cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                          cursor={{ fill: 'var(--bg-hover)' }}
                         />
-                        <Bar dataKey="value" fill="#10b981" radius={[0, 4, 4, 0]} barSize={24} />
+                        <Bar dataKey="value" fill="var(--success-color)" radius={[0, 4, 4, 0]} barSize={24} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -1585,11 +1585,11 @@ export default function Home() {
                     {/* Pagination controls */}
                     <div className={styles.pagination}>
                       <div className={styles.paginationInfo}>
-                        Showing <span style={{ fontWeight: '600', color: 'white' }}>{((pagination.currentPage - 1) * 25 + 1).toLocaleString()}</span> to{' '}
-                        <span style={{ fontWeight: '600', color: 'white' }}>
+                        Showing <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{((pagination.currentPage - 1) * 25 + 1).toLocaleString()}</span> to{' '}
+                        <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
                           {Math.min(pagination.currentPage * 25, pagination.totalRecords).toLocaleString()}
                         </span> of{' '}
-                        <span style={{ fontWeight: '600', color: 'white' }}>{pagination.totalRecords.toLocaleString()}</span> entries
+                        <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{pagination.totalRecords.toLocaleString()}</span> entries
                       </div>
                       <div className={styles.paginationBtnGroup}>
                         <button 
@@ -1626,14 +1626,14 @@ export default function Home() {
                   <button 
                     onClick={exportAllBeneficiaries}
                     className={styles.submitBtn}
-                    style={{ margin: 0, padding: '0.75rem 1.25rem', width: 'auto', background: 'rgba(255,255,255,0.05)', boxShadow: 'none', border: '1px solid var(--border-color)', color: 'white' }}
+                    style={{ margin: 0, padding: '0.75rem 1.25rem', width: 'auto', background: 'var(--bg-hover)', boxShadow: 'none', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                   >
                     📥 Export All
                   </button>
                   <button 
                     onClick={downloadBulkRegistrationTemplate}
                     className={styles.submitBtn}
-                    style={{ margin: 0, padding: '0.75rem 1.25rem', width: 'auto', background: 'rgba(255,255,255,0.05)', boxShadow: 'none', border: '1px solid var(--border-color)', color: 'white' }}
+                    style={{ margin: 0, padding: '0.75rem 1.25rem', width: 'auto', background: 'var(--bg-hover)', boxShadow: 'none', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                   >
                     📄 Template
                   </button>
@@ -1843,7 +1843,7 @@ export default function Home() {
                   gap: '1.5rem',
                   zIndex: 100
                 }}>
-                  <span style={{ color: 'white', fontWeight: 'bold' }}>{selectedForPayout.length} Selected</span>
+                  <span style={{ color: 'var(--text-primary)', fontWeight: 'bold' }}>{selectedForPayout.length} Selected</span>
                   <button 
                     className={styles.submitBtn} 
                     style={{ padding: '0.5rem 1.5rem', borderRadius: '50px', margin: 0 }}
@@ -1880,7 +1880,7 @@ export default function Home() {
               {!importFile ? (
                 <div 
                   className={styles.tableCard} 
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem', border: '2px dashed var(--border-color)', background: 'rgba(255,255,255,0.01)', position: 'relative', cursor: 'pointer' }}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem', border: '2px dashed var(--border-color)', background: 'var(--bg-hover)', position: 'relative', cursor: 'pointer' }}
                   onClick={() => document.getElementById('transaction-upload-input').click()}
                 >
                   <input
@@ -1994,7 +1994,7 @@ export default function Home() {
             
             <div className={styles.drawerHeader}>
               <div>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'white', lineHeight: '1.4' }}>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-primary)', lineHeight: '1.4' }}>
                   {selectedBen.name}
                 </h2>
                 <span className={styles.benCategory}>{selectedBen.category || 'Operational'}</span>
@@ -2068,7 +2068,7 @@ export default function Home() {
               </div>
             </div>
 
-            <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem', color: 'white' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem', color: 'var(--text-primary)' }}>
               Recent Payment Audits (Max 10)
             </h3>
 
@@ -2086,7 +2086,7 @@ export default function Home() {
                   <div 
                     key={tx.id} 
                     style={{ 
-                      background: 'rgba(255,255,255,0.02)', 
+                      background: 'var(--bg-hover)', 
                       border: '1px solid var(--border-color)', 
                       borderRadius: '12px', 
                       padding: '1rem',
@@ -2096,7 +2096,7 @@ export default function Home() {
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: '0.85rem', fontWeight: '600', color: 'white' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-primary)' }}>
                         {tx.batch_settlement_date ? new Date(tx.batch_settlement_date).toLocaleDateString('en-EG', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
                       </div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '0.15rem' }}>
@@ -2110,7 +2110,7 @@ export default function Home() {
                     </div>
 
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: '700', fontSize: '0.9rem', color: 'white', fontFamily: 'monospace' }}>
+                      <div style={{ fontWeight: '700', fontSize: '0.9rem', color: 'var(--text-primary)', fontFamily: 'monospace' }}>
                         {formatEGP(tx.transaction_amount)}
                       </div>
                       <span 
@@ -2140,13 +2140,13 @@ export default function Home() {
               </div>
             </div>
 
-            <div className={styles.tableCard} style={{ display: 'flex', flexDirection: 'column', padding: '2rem', border: 'none', background: 'rgba(255,255,255,0.02)', marginTop: '2rem' }}>
+            <div className={styles.tableCard} style={{ display: 'flex', flexDirection: 'column', padding: '2rem', border: 'none', background: 'var(--bg-hover)', marginTop: '2rem' }}>
               <div style={{ display: 'flex', gap: '2rem', alignItems: 'stretch', flexWrap: 'wrap' }}>
                 
                 {/* Upload Zone */}
                 <div style={{ flex: '1', minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 style={{ fontSize: '1.25rem', color: 'white', margin: 0, fontWeight: '700' }}>Step 1: Upload Data</h3>
+                    <h3 style={{ fontSize: '1.25rem', color: 'var(--text-primary)', margin: 0, fontWeight: '700' }}>Step 1: Upload Data</h3>
                     <button 
                       onClick={downloadPayoutTemplate}
                       style={{ background: 'none', border: 'none', color: 'var(--accent-color)', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'bold' }}
@@ -2180,20 +2180,20 @@ export default function Home() {
                       style={{ display: 'none' }} 
                     />
                     <div style={{ fontSize: '3rem', marginBottom: '1rem', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.3))' }}>📄</div>
-                    <div style={{ fontSize: '1.1rem', color: 'white', fontWeight: 'bold', marginBottom: '0.5rem' }}>Drag & Drop your file here</div>
+                    <div style={{ fontSize: '1.1rem', color: 'var(--text-primary)', fontWeight: 'bold', marginBottom: '0.5rem' }}>Drag & Drop your file here</div>
                     <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>or click to browse (.xlsx, .csv)</div>
-                    <div style={{ marginTop: '1.5rem', background: 'rgba(255,255,255,0.05)', padding: '0.75rem 1.25rem', borderRadius: '8px', fontSize: '0.85rem', color: '#cbd5e1', border: '1px solid rgba(255,255,255,0.1)' }}>
-                      Required columns: <strong style={{ color: 'white' }}>Employee ID</strong>, <strong style={{ color: 'white' }}>Amount</strong>, <strong style={{ color: 'white' }}>Comment</strong>
+                    <div style={{ marginTop: '1.5rem', background: 'var(--bg-hover)', padding: '0.75rem 1.25rem', borderRadius: '8px', fontSize: '0.85rem', color: 'var(--text-secondary)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                      Required columns: <strong style={{ color: 'var(--text-primary)' }}>Employee ID</strong>, <strong style={{ color: 'var(--text-primary)' }}>Amount</strong>, <strong style={{ color: 'var(--text-primary)' }}>Comment</strong>
                     </div>
                   </div>
                 </div>
 
                 {/* Status & Export Zone */}
                 <div style={{ flex: '1', minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  <h3 style={{ fontSize: '1.25rem', color: 'white', margin: 0, fontWeight: '700' }}>Step 2: Review & Export</h3>
+                  <h3 style={{ fontSize: '1.25rem', color: 'var(--text-primary)', margin: 0, fontWeight: '700' }}>Step 2: Review & Export</h3>
                   
                   <div style={{ 
-                    background: 'rgba(15, 23, 42, 0.6)', 
+                    background: 'var(--bg-card)', 
                     border: '1px solid var(--border-color)', 
                     borderRadius: '16px', 
                     padding: '1.5rem',
@@ -2215,9 +2215,9 @@ export default function Home() {
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', background: 'var(--bg-hover)', borderRadius: '12px', alignItems: 'center' }}>
                           <span style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>Total Rows Scanned</span>
-                          <span style={{ fontWeight: '800', color: 'white', fontSize: '1.2rem' }}>{payoutStats.total}</span>
+                          <span style={{ fontWeight: '800', color: 'var(--text-primary)', fontSize: '1.2rem' }}>{payoutStats.total}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '12px', alignItems: 'center' }}>
                           <span style={{ color: '#10b981', fontWeight: '600' }}>Ready for Payout</span>
@@ -2410,7 +2410,7 @@ export default function Home() {
 
               <div style={{ maxHeight: '50vh', overflowY: 'auto', paddingRight: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {bulkConflicts.map((conflict, idx) => (
-                  <div key={idx} style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                  <div key={idx} style={{ background: 'var(--bg-hover)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Uploaded Data</div>
