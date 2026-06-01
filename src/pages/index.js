@@ -18,6 +18,22 @@ export default function Home() {
   const [isAuthLoading, setIsAuthLoading] = useState(false)
   const [isInitialCheck, setIsInitialCheck] = useState(true)
 
+  // Theme State
+  const [theme, setTheme] = useState('dark')
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('app-theme') || 'dark'
+    setTheme(savedTheme)
+    document.documentElement.setAttribute('data-theme', savedTheme)
+  }, [])
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark'
+    setTheme(newTheme)
+    localStorage.setItem('app-theme', newTheme)
+    document.documentElement.setAttribute('data-theme', newTheme)
+  }
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
@@ -49,9 +65,21 @@ export default function Home() {
 
   // Navigation State (Active View)
   const [activeView, setActiveView] = useState('dashboard') // 'dashboard' | 'beneficiaries'
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  const handleNavClick = (view) => {
+    setActiveView(view)
+    setSidebarOpen(false)
+  }
 
   // Clipboard Copied State
   const [copiedKey, setCopiedKey] = useState('')
+
+  // Transaction Import State
+  const [importFile, setImportFile] = useState(null)
+  const [importPreview, setImportPreview] = useState([])
+  const [importStats, setImportStats] = useState({ total: 0, valid: 0, warnings: 0, errors: 0 })
+  const [isImporting, setIsImporting] = useState(false)
 
   // Receipt Generator State
   const receiptRef = useRef(null)
@@ -674,12 +702,138 @@ export default function Home() {
 
       toast.success(`Successfully registered ${newBens.length} new and updated ${updates.length} existing beneficiaries.`)
       setShowBulkConflictModal(false)
+      setBulkNewBens([])
       fetchBeneficiaries()
     } catch (err) {
       console.error(err)
-      toast.error('Database execution failed: ' + err.message)
+      toast.error('Failed to save bulk beneficiaries: ' + err.message)
     } finally {
       setIsBulkProcessing(false)
+    }
+  }
+
+  // Transaction Import Handlers
+  const handleTransactionFileUpload = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    setImportFile(file)
+    setIsImporting(true)
+    const reader = new FileReader()
+
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target.result
+        const wb = XLSX.read(bstr, { type: 'binary' })
+        const wsname = wb.SheetNames[0]
+        const ws = wb.Sheets[wsname]
+        const rawData = XLSX.utils.sheet_to_json(ws, { defval: '' })
+
+        if (rawData.length === 0) {
+          toast.error('The uploaded file is empty.')
+          setIsImporting(false)
+          return
+        }
+
+        // We assume average amount for warning heuristic
+        let totalAmount = 0
+        let countAmounts = 0
+        rawData.forEach(row => {
+          const amt = parseFloat(row['Amount'] || row['transaction_amount'])
+          if (!isNaN(amt)) {
+            totalAmount += amt
+            countAmounts++
+          }
+        })
+        const avgAmount = countAmounts > 0 ? totalAmount / countAmounts : 0
+
+        const previewData = rawData.map((row, index) => {
+          const creditor_name = row['Creditor Name'] || row['creditor_name'] || row['Name'] || ''
+          const transaction_amount = parseFloat(row['Amount'] || row['transaction_amount'] || 0)
+          const creditor_account_number = row['Account Number'] || row['creditor_account_number'] || ''
+          
+          let status = 'valid'
+          let errors = []
+
+          if (!creditor_name) errors.push('Missing name')
+          if (!transaction_amount || isNaN(transaction_amount) || transaction_amount <= 0) errors.push('Invalid amount')
+          if (!creditor_account_number) errors.push('Missing account')
+
+          if (errors.length > 0) {
+            status = 'error'
+          } else if (transaction_amount > avgAmount * 10 && avgAmount > 0) {
+            status = 'warning'
+            errors.push('Abnormal amount (>10x avg)')
+          }
+
+          return {
+            id: index,
+            batch_id: row['Batch ID'] || row['batch_id'] || `IMPORT-${new Date().toISOString().split('T')[0]}`,
+            batch_settlement_date: row['Date'] || row['batch_settlement_date'] || new Date().toISOString(),
+            transaction_id: row['Transaction ID'] || row['transaction_id'] || `TX-IMP-${Date.now()}-${index}`,
+            transaction_amount,
+            creditor_name,
+            creditor_account_number,
+            transaction_status: row['Status'] || row['transaction_status'] || 'Accepted',
+            transaction_purpose: row['Purpose'] || row['transaction_purpose'] || 'Upload',
+            status,
+            errors
+          }
+        })
+
+        const stats = {
+          total: previewData.length,
+          valid: previewData.filter(r => r.status === 'valid').length,
+          warnings: previewData.filter(r => r.status === 'warning').length,
+          errors: previewData.filter(r => r.status === 'error').length
+        }
+
+        setImportPreview(previewData)
+        setImportStats(stats)
+
+      } catch (err) {
+        console.error(err)
+        toast.error('Failed to parse file: ' + err.message)
+      } finally {
+        setIsImporting(false)
+        e.target.value = ''
+      }
+    }
+    reader.readAsBinaryString(file)
+  }
+
+  const handleImportCommit = async () => {
+    const validRows = importPreview.filter(r => r.status !== 'error')
+    if (validRows.length === 0) {
+      toast.error('No valid rows to commit.')
+      return
+    }
+
+    setIsImporting(true)
+    try {
+      const res = await fetch('/api/bulk_import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactions: validRows })
+      })
+
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || 'Failed to commit')
+
+      toast.success(`Successfully imported ${result.inserted} new transactions. Skipped ${result.skipped} duplicates.`)
+      
+      // Reset state and switch view
+      setImportFile(null)
+      setImportPreview([])
+      setImportStats({ total: 0, valid: 0, warnings: 0, errors: 0 })
+      setActiveView('transactions')
+      fetchDashboardData()
+      
+    } catch (err) {
+      console.error(err)
+      toast.error('Import failed: ' + err.message)
+    } finally {
+      setIsImporting(false)
     }
   }
 
@@ -945,36 +1099,82 @@ export default function Home() {
     return new Intl.NumberFormat('en-EG', { style: 'currency', currency: 'EGP' }).format(val)
   }
   if (isInitialCheck) {
-    return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a', color: 'white', fontFamily: 'Inter, sans-serif' }}>Establishing secure connection...</div>
+    return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontFamily: 'var(--font-sans)' }}>Establishing secure connection...</div>
   }
 
   if (!session) {
     return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)', fontFamily: 'var(--font-sans)', padding: '20px' }}>
         <Head>
           <title>Login - Nile Treasury</title>
         </Head>
-        <div style={{ background: '#1e293b', padding: '40px', borderRadius: '12px', width: '400px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', border: '1px solid #334155' }}>
-          <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-            <span style={{ fontSize: '40px' }}>🏛️</span>
-            <h1 style={{ color: 'white', fontSize: '24px', margin: '15px 0 5px 0' }}>NU Treasury</h1>
-            <p style={{ color: '#94a3b8', margin: 0, fontSize: '14px' }}>Authorized Personnel Only</p>
-          </div>
+        <div style={{ 
+          background: 'var(--bg-card)', 
+          padding: '3rem', 
+          borderRadius: '24px', 
+          width: '100%', 
+          maxWidth: '480px',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+          border: '1px solid var(--border-color)',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🏛️</div>
+          <h1 style={{ color: 'var(--text-primary)', fontSize: '24px', margin: '15px 0 5px 0' }}>NU Treasury</h1>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>Secure Automated Clearing House</p>
+          
           {authError && (
-            <div style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px', borderRadius: '6px', fontSize: '13px', marginBottom: '20px', border: '1px solid rgba(239,68,68,0.2)' }}>
+            <div style={{ background: 'var(--error-glow)', color: 'var(--error-color)', padding: '10px', borderRadius: '6px', fontSize: '13px', marginBottom: '20px', border: '1px solid var(--error-color)' }}>
               {authError}
             </div>
           )}
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            <div>
-              <label style={{ display: 'block', color: '#cbd5e1', fontSize: '13px', marginBottom: '6px' }}>Email Address</label>
-              <input type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} required style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: 'white', boxSizing: 'border-box' }} placeholder="admin@nu.edu.eg" />
-            </div>
-            <div>
-              <label style={{ display: 'block', color: '#cbd5e1', fontSize: '13px', marginBottom: '6px' }}>Password</label>
-              <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} required style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', color: 'white', boxSizing: 'border-box' }} placeholder="••••••••" />
-            </div>
-            <button type="submit" disabled={isAuthLoading} style={{ marginTop: '10px', background: '#3b82f6', color: 'white', border: 'none', padding: '12px', borderRadius: '6px', cursor: isAuthLoading ? 'wait' : 'pointer', fontWeight: 'bold', fontSize: '14px', transition: 'background 0.2s' }}>
+          
+          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <input
+              type="email"
+              placeholder="Corporate Email"
+              value={authEmail}
+              onChange={(e) => setAuthEmail(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '14px 16px',
+                borderRadius: '12px',
+                border: '1px solid var(--border-color)',
+                background: 'var(--input-bg)',
+                color: 'var(--text-primary)',
+                outline: 'none',
+                fontSize: '1rem'
+              }}
+              required
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={authPassword}
+              onChange={(e) => setAuthPassword(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '14px 16px',
+                borderRadius: '12px',
+                border: '1px solid var(--border-color)',
+                background: 'var(--input-bg)',
+                color: 'var(--text-primary)',
+                outline: 'none',
+                fontSize: '1rem'
+              }}
+              required
+            />
+            <button type="submit" disabled={isAuthLoading} style={{ 
+              marginTop: '1rem', 
+              background: 'var(--accent-color)', 
+              color: '#ffffff', 
+              border: 'none', 
+              padding: '14px', 
+              borderRadius: '12px', 
+              cursor: isAuthLoading ? 'wait' : 'pointer', 
+              fontWeight: '600', 
+              fontSize: '1rem', 
+              transition: 'all 0.2s' 
+            }}>
               {isAuthLoading ? 'Authenticating...' : 'Secure Sign In'}
             </button>
           </form>
@@ -998,8 +1198,14 @@ export default function Home() {
         <TransactionReceipt transaction={receiptTx} ref={receiptRef} />
       </div>
 
+      {/* Sidebar Overlay for Mobile */}
+      <div 
+        className={`${styles.sidebarOverlay} ${sidebarOpen ? styles.open : ''}`}
+        onClick={() => setSidebarOpen(false)}
+      ></div>
+
       {/* 🏛️ PREMIUM SIDEBAR NAVIGATION */}
-      <aside className={styles.sidebar}>
+      <aside className={`${styles.sidebar} ${sidebarOpen ? styles.open : ''}`}>
         <div className={styles.sidebarHeader}>
           <span className={styles.sidebarLogo}>🏛️</span>
           <div className={styles.sidebarLogoText}>NU Treasury</div>
@@ -1007,41 +1213,49 @@ export default function Home() {
 
         <nav className={styles.sidebarNav}>
           <button 
-            onClick={() => setActiveView('dashboard')} 
+            onClick={() => handleNavClick('dashboard')} 
             className={`${styles.navLink} ${activeView === 'dashboard' ? styles.active : ''}`}
           >
             <span>📊</span> Analytics
           </button>
 
           <button 
-            onClick={() => setActiveView('transactions')} 
+            onClick={() => handleNavClick('transactions')} 
             className={`${styles.navLink} ${activeView === 'transactions' ? styles.active : ''}`}
           >
             <span>🗃️</span> Transactions
           </button>
           
           <button 
-            onClick={() => { setActiveView('beneficiaries'); fetchBeneficiaries(); }} 
+            onClick={() => { handleNavClick('beneficiaries'); fetchBeneficiaries(); }} 
             className={`${styles.navLink} ${activeView === 'beneficiaries' ? styles.active : ''}`}
           >
             <span>👥</span> Beneficiaries
           </button>
           
           <button 
-            onClick={() => setActiveView('import')} 
+            onClick={() => handleNavClick('import')} 
             className={`${styles.navLink} ${activeView === 'import' ? styles.active : ''}`}
           >
             <span>📥</span> Transactions Upload
           </button>
 
           <button 
-            onClick={() => setActiveView('payouts')} 
+            onClick={() => handleNavClick('payouts')} 
             className={`${styles.navLink} ${activeView === 'payouts' ? styles.active : ''}`}
           >
             <span>📤</span> Batch Payments
           </button>
           
           <div style={{ marginTop: 'auto' }}>
+            <button 
+              onClick={toggleTheme} 
+              className={styles.navLink}
+              style={{ width: '100%', marginBottom: '10px' }}
+            >
+              <span>{theme === 'dark' ? '☀️' : '🌙'}</span> 
+              {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+            </button>
             <button 
               onClick={handleLogout} 
               className={styles.navLink}
@@ -1078,6 +1292,12 @@ export default function Home() {
 
       {/* 📊 MAIN CONTAINER INTERFACE */}
       <main className={styles.mainContent}>
+        <button 
+          className={styles.hamburgerBtn}
+          onClick={() => setSidebarOpen(true)}
+        >
+          ☰
+        </button>
         <div className={styles.container}>
 
           {/* Shared Filters for Dashboard and Transactions */}
@@ -1650,14 +1870,105 @@ export default function Home() {
                   <p className={styles.subtitle}>Upload ACH settlement reports securely</p>
                 </div>
               </header>
-              <div className={styles.tableCard} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem', border: '2px dashed var(--border-color)', background: 'rgba(255,255,255,0.01)' }}>
-                <div style={{ fontSize: '3rem', margin: '1rem' }}>📤</div>
-                <h3 style={{ marginBottom: '0.5rem', color: 'white' }}>Drag & Drop Excel/CSV File</h3>
-                <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>Supported formats: .xls, .xlsx, .csv</p>
-                <button className={styles.submitBtn} onClick={() => toast.error('Backend parsing logic is required for Excel files. Currently data is loaded via the python bulk-uploader.')}>
-                  Select File to Upload
-                </button>
-              </div>
+
+              {!importFile ? (
+                <div className={styles.tableCard} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem', border: '2px dashed var(--border-color)', background: 'rgba(255,255,255,0.01)', position: 'relative' }}>
+                  <input
+                    type="file"
+                    accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                    onChange={handleTransactionFileUpload}
+                    style={{ position: 'absolute', width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+                    disabled={isImporting}
+                  />
+                  <div style={{ fontSize: '3rem', margin: '1rem' }}>📤</div>
+                  <h3 style={{ marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Drag & Drop Excel/CSV File</h3>
+                  <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>Supported formats: .xls, .xlsx, .csv</p>
+                  <button className={styles.submitBtn} disabled={isImporting}>
+                    {isImporting ? 'Processing...' : 'Select File to Upload'}
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                    <div className={styles.kpiCard}>
+                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total Rows</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{importStats.total}</div>
+                    </div>
+                    <div className={styles.kpiCard} style={{ borderBottom: '4px solid var(--success-color)' }}>
+                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Valid</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--success-color)' }}>{importStats.valid}</div>
+                    </div>
+                    <div className={styles.kpiCard} style={{ borderBottom: '4px solid var(--warning-color)' }}>
+                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Warnings</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--warning-color)' }}>{importStats.warnings}</div>
+                    </div>
+                    <div className={styles.kpiCard} style={{ borderBottom: '4px solid var(--error-color)' }}>
+                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Errors</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--error-color)' }}>{importStats.errors}</div>
+                    </div>
+                  </div>
+
+                  <div className={styles.tableCard}>
+                    <div className={styles.tableHeader}>
+                      <h2>Data Preview</h2>
+                      <div style={{ display: 'flex', gap: '1rem' }}>
+                        <button 
+                          className={styles.submitBtn} 
+                          style={{ background: 'var(--bg-hover)', color: 'var(--text-primary)', boxShadow: 'none' }}
+                          onClick={() => { setImportFile(null); setImportPreview([]) }}
+                          disabled={isImporting}
+                        >
+                          Cancel
+                        </button>
+                        <button 
+                          className={styles.submitBtn} 
+                          onClick={handleImportCommit}
+                          disabled={importStats.valid === 0 || isImporting}
+                        >
+                          {isImporting ? 'Importing...' : 'Commit to Database'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className={styles.tableWrapper}>
+                      <table className={styles.table}>
+                        <thead>
+                          <tr>
+                            <th className={styles.th}>Status</th>
+                            <th className={styles.th}>Creditor Name</th>
+                            <th className={styles.th}>Account Number</th>
+                            <th className={styles.th}>Amount</th>
+                            <th className={styles.th}>Batch ID</th>
+                            <th className={styles.th}>Issues</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importPreview.slice(0, 50).map((row, idx) => (
+                            <tr key={idx} className={styles.tr}>
+                              <td className={styles.td}>
+                                {row.status === 'valid' && <span className={styles.statusBadge} style={{ background: 'var(--success-glow)', color: 'var(--success-color)' }}>Valid</span>}
+                                {row.status === 'warning' && <span className={styles.statusBadge} style={{ background: 'var(--warning-glow)', color: 'var(--warning-color)' }}>Warning</span>}
+                                {row.status === 'error' && <span className={styles.statusBadge} style={{ background: 'var(--error-glow)', color: 'var(--error-color)' }}>Error</span>}
+                              </td>
+                              <td className={styles.td} style={{ fontWeight: '500' }}>{row.creditor_name}</td>
+                              <td className={styles.td}>{row.creditor_account_number}</td>
+                              <td className={styles.td}>{formatEGP(row.transaction_amount)}</td>
+                              <td className={styles.td}>{row.batch_id}</td>
+                              <td className={styles.td} style={{ color: 'var(--error-color)', fontSize: '0.85rem' }}>
+                                {row.errors.join(', ')}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {importPreview.length > 50 && (
+                        <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-secondary)', borderTop: '1px solid var(--border-color)' }}>
+                          Showing first 50 rows of {importPreview.length}...
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -2234,4 +2545,4 @@ export default function Home() {
 }
 // Trigger Vercel Refresh
 
-// Force update
+// Vercel bundle update

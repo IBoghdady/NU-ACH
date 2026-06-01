@@ -23,7 +23,7 @@
 /* ---------------------------------------------------- */
 .sidebar {
   width: 260px;
-  background: rgba(15, 20, 32, 0.85);
+  background: var(--sidebar-bg);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   border-right: 1px solid var(--border-color);
@@ -50,7 +50,7 @@
   font-weight: 800;
   font-size: 1.25rem;
   letter-spacing: -0.03em;
-  background: linear-gradient(135deg, #ffffff 40%, #818cf8 100%);
+  background: var(--logo-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -87,7 +87,7 @@
 .active {
   background: var(--accent-glow);
   color: var(--accent-color);
-  border-color: rgba(59, 130, 246, 0.2);
+  border-color: var(--accent-glow);
 }
 
 .sidebarFooter {
@@ -156,7 +156,7 @@
   font-size: 2.25rem;
   font-weight: 800;
   letter-spacing: -0.025em;
-  background: linear-gradient(135deg, #ffffff 30%, #a5b4fc 100%);
+  background: var(--title-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 0.25rem;
@@ -171,7 +171,7 @@
 .exportBtn {
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--kpi-hover-border);
   padding: 0.75rem 1.5rem;
   border-radius: 12px;
   font-size: 0.95rem;
@@ -218,7 +218,7 @@
 
 .kpiCard:hover {
   transform: translateY(-4px);
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: var(--kpi-hover-border);
 }
 
 .kpiHeader {
@@ -258,19 +258,19 @@
 }
 
 .kpiAccent .kpiIcon {
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--accent-glow);
   color: var(--accent-color);
 }
 .kpiSuccess .kpiIcon {
-  background: rgba(16, 185, 129, 0.1);
+  background: var(--success-glow);
   color: var(--success-color);
 }
 .kpiError .kpiIcon {
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--error-glow);
   color: var(--error-color);
 }
 .kpiWarning .kpiIcon {
-  background: rgba(245, 158, 11, 0.1);
+  background: var(--warning-glow);
   color: var(--warning-color);
 }
 
@@ -296,7 +296,7 @@
 
 .searchInput {
   width: 100%;
-  background: rgba(10, 12, 16, 0.6);
+  background: var(--input-bg);
   border: 1px solid var(--border-color);
   padding: 0.85rem 1rem 0.85rem 2.75rem;
   border-radius: 12px;
@@ -310,7 +310,7 @@
   outline: none;
   border-color: var(--accent-color);
   box-shadow: 0 0 0 3px var(--accent-glow);
-  background: rgba(10, 12, 16, 0.8);
+  background: var(--input-focus-bg);
 }
 
 .searchIcon {
@@ -324,7 +324,7 @@
 }
 
 .selectInput {
-  background: rgba(10, 12, 16, 0.6);
+  background: var(--input-bg);
   border: 1px solid var(--border-color);
   padding: 0.85rem 1rem;
   border-radius: 12px;
@@ -343,7 +343,7 @@
 }
 
 .dateInput {
-  background: rgba(10, 12, 16, 0.6);
+  background: var(--input-bg);
   border: 1px solid var(--border-color);
   padding: 0.85rem 1rem;
   border-radius: 12px;
@@ -384,7 +384,7 @@
 }
 
 .th {
-  background: rgba(15, 23, 42, 0.4);
+  background: var(--table-header-bg);
   padding: 1rem 1.25rem;
   font-weight: 600;
   color: var(--text-secondary);
@@ -428,21 +428,21 @@
 }
 
 .statusAccepted {
-  background: rgba(16, 185, 129, 0.1);
+  background: var(--success-glow);
   color: var(--success-color);
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  border: 1px solid var(--success-color);
 }
 
 .statusRejected {
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--error-glow);
   color: var(--error-color);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  border: 1px solid var(--error-color);
 }
 
 .statusReturned {
-  background: rgba(245, 158, 11, 0.1);
+  background: var(--warning-glow);
   color: var(--warning-color);
-  border: 1px solid rgba(245, 158, 11, 0.2);
+  border: 1px solid var(--warning-color);
 }
 
 .pagination {
@@ -451,7 +451,7 @@
   align-items: center;
   padding: 1.25rem 1.5rem;
   border-top: 1px solid var(--border-color);
-  background: rgba(15, 23, 42, 0.2);
+  background: var(--bg-hover);
 }
 
 .paginationInfo {
@@ -465,7 +465,7 @@
 }
 
 .pageBtn {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-hover);
   border: 1px solid var(--border-color);
   color: white;
   padding: 0.5rem 1rem;
@@ -510,8 +510,8 @@
 
 .beneficiaryCard:hover {
   transform: translateY(-4px);
-  border-color: rgba(255, 255, 255, 0.15);
-  background: rgba(18, 22, 32, 0.85);
+  border-color: var(--kpi-hover-border);
+  background: var(--bg-card);
 }
 
 .benInfo {
@@ -521,7 +521,7 @@
 .benAvatar {
   width: 44px;
   height: 44px;
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--accent-glow);
   color: var(--accent-color);
   border-radius: 12px;
   display: flex;
@@ -544,7 +544,7 @@
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-hover);
   padding: 0.2rem 0.5rem;
   border-radius: 6px;
   border: 1px solid var(--border-color);
@@ -578,7 +578,7 @@
 
 .benBtn {
   flex: 1;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-hover);
   border: 1px solid var(--border-color);
   color: white;
   font-weight: 600;
@@ -631,7 +631,7 @@
 .drawer {
   width: 550px;
   height: 100%;
-  background: rgba(10, 12, 16, 0.95);
+  background: var(--drawer-bg);
   backdrop-filter: blur(20px);
   border-left: 1px solid var(--border-color);
   padding: 2.5rem;
@@ -701,7 +701,7 @@
 }
 
 .inputField {
-  background: rgba(10, 12, 16, 0.7);
+  background: var(--input-bg);
   border: 1px solid var(--border-color);
   padding: 0.85rem 1rem;
   border-radius: 12px;
@@ -718,7 +718,7 @@
 }
 
 .textareaField {
-  background: rgba(10, 12, 16, 0.7);
+  background: var(--input-bg);
   border: 1px solid var(--border-color);
   padding: 0.85rem 1rem;
   border-radius: 12px;
@@ -739,7 +739,7 @@
 .submitBtn {
   background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
   padding: 0.95rem;
   border-radius: 12px;
   font-size: 1rem;
@@ -767,8 +767,8 @@
 /* STATUSES & UTILITIES                                 */
 /* ---------------------------------------------------- */
 .successBanner {
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  background: var(--success-glow);
+  border: 1px solid var(--success-color);
   color: var(--success-color);
   padding: 1rem;
   border-radius: 12px;
@@ -781,8 +781,8 @@
 }
 
 .errorBanner {
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: var(--error-glow);
+  border: 1px solid var(--error-color);
   color: var(--error-color);
   padding: 1rem;
   border-radius: 12px;
@@ -826,7 +826,7 @@
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid rgba(255, 255, 255, 0.1);
+  border: 3px solid var(--border-color);
   border-radius: 50%;
   border-top-color: var(--accent-color);
   animation: spin 1s linear infinite;
@@ -836,36 +836,71 @@
   to { transform: rotate(360deg); }
 }
 
+.hamburgerBtn {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  z-index: 100;
+}
+
+.sidebarOverlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 40;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.sidebarOverlay.open {
+  display: block;
+  opacity: 1;
+}
+
 @media (max-width: 968px) {
   .appLayout {
     flex-direction: column;
   }
   
+  .hamburgerBtn {
+    display: block;
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+  }
+
   .sidebar {
-    width: 100%;
-    height: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--border-color);
-    padding: 1rem;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 280px;
+    height: 100vh;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: var(--sidebar-bg);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
   }
   
   .sidebarHeader {
-    margin-bottom: 1rem;
-  }
-  
-  .sidebarNav {
-    flex-direction: row;
-    overflow-x: auto;
-    padding-bottom: 0.5rem;
-  }
-  
-  .navLink {
-    padding: 0.6rem 1rem;
-    font-size: 0.85rem;
+    margin-top: 2rem;
+    margin-bottom: 2rem;
   }
   
   .mainContent {
     padding: 1.5rem;
+    padding-top: 4rem; /* space for hamburger */
   }
   
   .filterSection {
@@ -878,7 +913,7 @@
 }
 
 .copyBtn {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-hover);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   color: var(--text-secondary);
@@ -897,7 +932,7 @@
 .copyBtn:hover {
   background: var(--bg-hover);
   color: white;
-  border-color: rgba(255, 255, 255, 0.25);
+  border-color: var(--border-color);
 }
 
 /* ---------------------------------------------------- */
@@ -921,7 +956,7 @@
 .dropZone:hover, .dropZoneActive {
   border-color: var(--accent-color);
   background: rgba(59, 130, 246, 0.05);
-  box-shadow: 0 0 25px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 25px var(--accent-glow);
   transform: translateY(-2px);
 }
 
@@ -953,7 +988,7 @@
 }
 
 .summaryItem {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-hover);
   border: 1px solid var(--border-color);
   padding: 1.25rem;
   border-radius: 16px;
@@ -979,7 +1014,7 @@
 .progressBarContainer {
   width: 100%;
   height: 12px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-hover);
   border-radius: 9999px;
   overflow: hidden;
   border: 1px solid var(--border-color);
@@ -1014,14 +1049,16 @@
 }
 
 .badgeGreen {
-  background: rgba(16, 185, 129, 0.1);
+  background: var(--success-glow);
   color: var(--success-color);
-  border-color: rgba(16, 185, 129, 0.2);
+  border-color: var(--success-color);
 }
 
 .badgeYellow {
-  background: rgba(245, 158, 11, 0.1);
+  background: var(--warning-glow);
   color: var(--warning-color);
-  border-color: rgba(245, 158, 11, 0.2);
+  border-color: var(--warning-color);
 }
 
+
+// Vercel bundle update
