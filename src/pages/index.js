@@ -129,6 +129,8 @@ export default function Home() {
   const [importPreviewFilter, setImportPreviewFilter] = useState('all')
   const [importStats, setImportStats] = useState({ total: 0, valid: 0, warnings: 0, errors: 0 })
   const [isImporting, setIsImporting] = useState(false)
+  const [importSummary, setImportSummary] = useState(null)
+  const [pendingTxStats, setPendingTxStats] = useState(null)
 
   // Receipt Generator State
   const receiptRef = useRef(null)
@@ -735,7 +737,7 @@ export default function Home() {
     reader.readAsArrayBuffer(file)
   }
 
-  const executeBulkInsert = async (newBens, resolvedConflicts) => {
+  const executeBulkInsert = async (newBens, resolvedConflicts, txStats = null) => {
     setIsBulkProcessing(true)
     try {
       const updates = resolvedConflicts.filter(c => c.action === 'update').map(c => ({
@@ -755,9 +757,19 @@ export default function Home() {
         if (updateErr) throw updateErr
       }
 
-      toast.success(`Successfully registered ${newBens.length} new and updated ${updates.length} existing beneficiaries.`)
+      if (txStats) {
+        setImportSummary({
+          txInserted: txStats.inserted,
+          txSkipped: txStats.skipped,
+          benInserted: newBens.length,
+          benUpdated: updates.length
+        })
+      } else {
+        toast.success(`Successfully registered ${newBens.length} new and updated ${updates.length} existing beneficiaries.`)
+      }
       setShowBulkConflictModal(false)
       setBulkNewBens([])
+      setPendingTxStats(null)
       fetchBeneficiaries()
     } catch (err) {
       console.error(err)
@@ -894,7 +906,7 @@ export default function Home() {
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || 'Failed to commit')
 
-      toast.success(`Successfully imported ${result.inserted} new transactions. Skipped ${result.skipped} duplicates.`)
+      const txStats = { inserted: result.inserted, skipped: result.skipped }
       
       // Fetch existing beneficiaries to extract new ones from transactions
       let existingData = []
@@ -959,10 +971,18 @@ export default function Home() {
         setBulkNewBens(newBens)
         if (conflicts.length > 0) {
           setBulkConflicts(conflicts)
+          setPendingTxStats(txStats)
           setShowBulkConflictModal(true)
         } else {
-          await executeBulkInsert(newBens, [])
+          await executeBulkInsert(newBens, [], txStats)
         }
+      } else {
+        setImportSummary({
+          txInserted: txStats.inserted,
+          txSkipped: txStats.skipped,
+          benInserted: 0,
+          benUpdated: 0
+        })
       }
       
     } catch (err) {
@@ -2606,12 +2626,48 @@ export default function Home() {
                 <button 
                   className={styles.submitBtn} 
                   style={{ flex: 0, padding: '10px 20px', whiteSpace: 'nowrap' }} 
-                  onClick={() => executeBulkInsert(bulkNewBens, bulkConflicts)}
+                  onClick={() => executeBulkInsert(bulkNewBens, bulkConflicts, pendingTxStats)}
                   disabled={isBulkProcessing}
                 >
                   {isBulkProcessing ? 'Processing...' : 'Confirm & Import'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Import Summary Modal */}
+        {importSummary && (
+          <div className={styles.drawerOverlay} style={{ zIndex: 1200 }} onClick={(e) => e.target === e.currentTarget && setImportSummary(null)}>
+            <div className={styles.formCard} style={{ width: '450px', maxWidth: '100%', margin: 'auto', textAlign: 'center' }}>
+              <div style={{ fontSize: '3.5rem', marginBottom: '0.5rem' }}>✅</div>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '1.5rem', color: 'var(--text-primary)' }}>Import Completed Successfully</h2>
+              
+              <div style={{ background: 'var(--bg-hover)', padding: '1.25rem', borderRadius: '8px', marginBottom: '1rem', textAlign: 'left', border: '1px solid var(--border-color)' }}>
+                <h3 style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginBottom: '0.75rem', fontWeight: '600' }}>Transactions</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <span>Imported Successfully:</span> <span style={{ fontWeight: 'bold', color: 'var(--success-color)' }}>{importSummary.txInserted}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Skipped (Duplicates):</span> <span style={{ fontWeight: 'bold', color: 'var(--text-secondary)' }}>{importSummary.txSkipped}</span>
+                </div>
+              </div>
+
+              {(importSummary.benInserted > 0 || importSummary.benUpdated > 0) && (
+                <div style={{ background: 'var(--bg-hover)', padding: '1.25rem', borderRadius: '8px', marginBottom: '1.5rem', textAlign: 'left', border: '1px solid var(--border-color)' }}>
+                  <h3 style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginBottom: '0.75rem', fontWeight: '600' }}>Beneficiaries Extracted</h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                    <span>Newly Registered:</span> <span style={{ fontWeight: 'bold', color: 'var(--success-color)' }}>{importSummary.benInserted}</span>
+                  </div>
+                  {importSummary.benUpdated > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Updated/Overwritten:</span> <span style={{ fontWeight: 'bold', color: 'var(--warning-color)' }}>{importSummary.benUpdated}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <button className={styles.submitBtn} style={{ marginTop: '1rem' }} onClick={() => setImportSummary(null)}>Close Summary</button>
             </div>
           </div>
         )}
