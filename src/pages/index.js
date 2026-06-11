@@ -908,6 +908,9 @@ export default function Home() {
 
       const txStats = { inserted: result.inserted, skipped: result.skipped }
       
+      // Immediate feedback for transactions before processing beneficiaries
+      toast.success(`Successfully processed ${result.inserted + result.skipped} rows. Checking beneficiaries...`)
+      
       // Fetch existing beneficiaries to extract new ones from transactions
       let existingData = []
       let from = 0
