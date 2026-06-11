@@ -9,6 +9,54 @@ import JSZip from 'jszip'
 import toast from 'react-hot-toast'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
 
+const formatDate = (dateVal) => {
+  if (!dateVal) return null;
+  if (typeof dateVal === 'number') {
+    if (dateVal > 10000 && dateVal < 100000) {
+      try {
+        const utc_days  = Math.floor(dateVal - 25569);
+        const utc_value = utc_days * 86400;                                        
+        const date_info = new Date(utc_value * 1000);
+        return date_info.toISOString().split('T')[0];
+      } catch (e) {}
+    }
+  }
+  if (typeof dateVal === 'string') {
+    dateVal = dateVal.trim();
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateVal)) {
+      const parts = dateVal.split('/');
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+    if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(dateVal)) {
+      const parts = dateVal.split('-');
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+  }
+  try {
+    const d = new Date(dateVal);
+    if (!isNaN(d.getTime())) {
+      return d.toISOString().split('T')[0];
+    }
+  } catch (e) {}
+  return dateVal;
+};
+
+const cleanAmount = (amt) => {
+  if (amt == null || amt === '') return 0;
+  if (typeof amt === 'number') return amt;
+  const cleaned = String(amt).replace(/,/g, '').trim();
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? 0 : parsed;
+};
+
+const cleanIsPrinted = (val) => {
+  if (val == null || val === '') return 0;
+  if (typeof val === 'number') return val;
+  if (typeof val === 'boolean') return val ? 1 : 0;
+  const num = parseInt(val, 10);
+  return isNaN(num) ? 0 : num;
+};
+
 export default function Home() {
   // Authentication State
   const [session, setSession] = useState(null)
@@ -130,16 +178,16 @@ export default function Home() {
     const reader = new FileReader()
     reader.onload = async (evt) => {
       try {
-        const bstr = evt.target.result
-        const wb = XLSX.read(bstr, { type: 'binary' })
+        const data = new Uint8Array(evt.target.result)
+        const wb = XLSX.read(data, { type: 'array' })
         const wsname = wb.SheetNames[0]
         const ws = wb.Sheets[wsname]
-        const data = XLSX.utils.sheet_to_json(ws)
+        const rawData = XLSX.utils.sheet_to_json(ws)
         
         // Map common column variations
-        const mappedData = data.map(row => ({
+        const mappedData = rawData.map(row => ({
           employeeId: row['Employee ID'] || row['EmployeeID'] || row['EMP ID'] || row['Employee Code'] || '',
-          amount: row['Amount'] || row['TransactionAmount'] || 0,
+          amount: cleanAmount(row['Amount'] || row['TransactionAmount'] || 0),
           comment: row['Comment'] || row['Comments'] || row['Description'] || ''
         }))
 
@@ -164,7 +212,7 @@ export default function Home() {
         setIsPayoutProcessing(false)
       }
     }
-    reader.readAsBinaryString(file)
+    reader.readAsArrayBuffer(file)
   }
 
   const exportPayoutToExcel = () => {
@@ -610,8 +658,8 @@ export default function Home() {
     const reader = new FileReader()
     reader.onload = async (evt) => {
       try {
-        const bstr = evt.target.result
-        const wb = XLSX.read(bstr, { type: 'binary' })
+        const data = new Uint8Array(evt.target.result)
+        const wb = XLSX.read(data, { type: 'array' })
         const wsname = wb.SheetNames[0]
         const ws = wb.Sheets[wsname]
         const rawData = XLSX.utils.sheet_to_json(ws)
@@ -678,7 +726,7 @@ export default function Home() {
         e.target.value = '' // reset input
       }
     }
-    reader.readAsBinaryString(file)
+    reader.readAsArrayBuffer(file)
   }
 
   const executeBulkInsert = async (newBens, resolvedConflicts) => {
@@ -724,8 +772,8 @@ export default function Home() {
 
     reader.onload = async (evt) => {
       try {
-        const bstr = evt.target.result
-        const wb = XLSX.read(bstr, { type: 'binary' })
+        const data = new Uint8Array(evt.target.result)
+        const wb = XLSX.read(data, { type: 'array' })
         const wsname = wb.SheetNames[0]
         const ws = wb.Sheets[wsname]
         const rawData = XLSX.utils.sheet_to_json(ws, { defval: '' })
@@ -740,8 +788,8 @@ export default function Home() {
         let totalAmount = 0
         let countAmounts = 0
         rawData.forEach(row => {
-          const amt = parseFloat(row['Amount'] || row['transaction_amount'])
-          if (!isNaN(amt)) {
+          const amt = cleanAmount(row['Transaction Amount'] || row['Amount'] || row['transaction_amount'])
+          if (!isNaN(amt) && amt > 0) {
             totalAmount += amt
             countAmounts++
           }
@@ -749,9 +797,9 @@ export default function Home() {
         const avgAmount = countAmounts > 0 ? totalAmount / countAmounts : 0
 
         const previewData = rawData.map((row, index) => {
-          const creditor_name = row['Creditor Name'] || row['creditor_name'] || row['Name'] || ''
-          const transaction_amount = parseFloat(row['Amount'] || row['transaction_amount'] || 0)
-          const creditor_account_number = row['Account Number'] || row['creditor_account_number'] || ''
+          const creditor_name = String(row['Creditor Name'] || row['creditor_name'] || row['Name'] || '').trim()
+          const creditor_account_number = String(row['Creditor Account Number'] || row['creditor_account_number'] || row['Account Number'] || '').trim()
+          const transaction_amount = cleanAmount(row['Transaction Amount'] || row['Amount'] || row['transaction_amount'])
           
           let status = 'valid'
           let errors = []
@@ -769,14 +817,27 @@ export default function Home() {
 
           return {
             id: index,
-            batch_id: row['Batch ID'] || row['batch_id'] || `IMPORT-${new Date().toISOString().split('T')[0]}`,
-            batch_settlement_date: row['Date'] || row['batch_settlement_date'] || new Date().toISOString(),
-            transaction_id: row['Transaction ID'] || row['transaction_id'] || `TX-IMP-${Date.now()}-${index}`,
+            batch_id: String(row['Batch ID'] || row['batch_id'] || '').trim() || `IMPORT-${new Date().toISOString().split('T')[0]}`,
+            batch_settlement_date: formatDate(row['Batch Settlement Date'] || row['batch_settlement_date'] || row['Date']) || new Date().toISOString().split('T')[0],
+            batch_purpose: String(row['Batch Purpose'] || row['batch_purpose'] || '').trim() || null,
+            batch_currency: String(row['Batch Currency'] || row['batch_currency'] || '').trim() || 'EGP',
+            instruction_identification: String(row['Instruction Identification'] || row['instruction_identification'] || '').trim() || null,
+            end_to_end_identifier: String(row['End To End Identifier'] || row['end_to_end_identifier'] || '').trim() || null,
+            transaction_id: String(row['Transaction ID'] || row['transaction_id'] || '').trim() || `TX-IMP-${Date.now()}-${index}`,
             transaction_amount,
+            debtor_name: String(row['Debtor Name'] || row['debtor_name'] || '').trim() || null,
+            debtor_account_number: String(row['Debtor Account Number'] || row['debtor_account_number'] || '').trim() || null,
+            debtor_party_bic: String(row['Debtor Party Bic'] || row['debtor_party_bic'] || '').trim() || null,
             creditor_name,
             creditor_account_number,
-            transaction_status: row['Status'] || row['transaction_status'] || 'Accepted',
-            transaction_purpose: row['Purpose'] || row['transaction_purpose'] || 'Upload',
+            creditor_party_bic: String(row['Creditor Party Bic'] || row['creditor_party_bic'] || '').trim() || null,
+            transaction_purpose: String(row['Transaction Purpose'] || row['transaction_purpose'] || row['Purpose'] || '').trim() || null,
+            comment: String(row['Comment'] || row['comment'] || '').trim() || null,
+            transaction_status: String(row['Transaction Status'] || row['transaction_status'] || row['Status'] || '').trim() || 'Accepted',
+            receiving_date: formatDate(row['Receiving Date'] || row['receiving_date']) || null,
+            transaction_isostatus_reason: String(row['Transaction ISoStatus Reason'] || row['transaction_isostatus_reason'] || '').trim() || null,
+            is_printed: cleanIsPrinted(row['IsPrinted'] || row['is_printed']),
+            isostatus_description: String(row['ISOStatus Description'] || row['isostatus_description'] || '').trim() || null,
             status,
             errors
           }
@@ -800,7 +861,7 @@ export default function Home() {
         e.target.value = ''
       }
     }
-    reader.readAsBinaryString(file)
+    reader.readAsArrayBuffer(file)
   }
 
   const handleImportCommit = async () => {
