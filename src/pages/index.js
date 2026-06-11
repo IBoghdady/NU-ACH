@@ -126,6 +126,7 @@ export default function Home() {
   // Transaction Import State
   const [importFile, setImportFile] = useState(null)
   const [importPreview, setImportPreview] = useState([])
+  const [importPreviewFilter, setImportPreviewFilter] = useState('all')
   const [importStats, setImportStats] = useState({ total: 0, valid: 0, warnings: 0, errors: 0 })
   const [isImporting, setIsImporting] = useState(false)
 
@@ -691,14 +692,19 @@ export default function Home() {
         const newBensMap = new Set() // For deduplicating the excel file itself
 
         rawData.forEach(row => {
-          const name = row['Name'] || row['name']
-          const acc = (row['Account Number'] || row['account_number'] || row['account'])?.toString()
+          const name = row['Name'] || row['name'] || row['Creditor Name'] || row['creditor_name']
+          const acc = (row['Account Number'] || row['account_number'] || row['account'] || row['Creditor Account Number'] || row['creditor_account_number'])?.toString()
           if (!name || !acc) return // skip invalid
+          
+          const status = row['Transaction Status'] || row['transaction_status'] || row['Status']
+          if (status && String(status).trim() !== 'Accepted') {
+            return
+          }
           
           const newRow = {
             name: String(name).trim(),
             account_number: acc.trim(),
-            bank_bic: (row['BIC'] || row['bic'] || row['bank_bic'])?.toString()?.trim() || null,
+            bank_bic: (row['BIC'] || row['bic'] || row['bank_bic'] || row['Creditor Party Bic'] || row['creditor_party_bic'])?.toString()?.trim() || null,
             employee_code: (row['Employee Code'] || row['employee_code'])?.toString()?.trim() || null,
             category: (row['Category'] || row['category'])?.toString()?.trim() || 'Operational'
           }
@@ -767,6 +773,7 @@ export default function Home() {
     if (!file) return
 
     setImportFile(file)
+    setImportPreviewFilter('all')
     setIsImporting(true)
     const reader = new FileReader()
 
@@ -892,6 +899,7 @@ export default function Home() {
       // Reset state and switch view
       setImportFile(null)
       setImportPreview([])
+      setImportPreviewFilter('all')
       setImportStats({ total: 0, valid: 0, warnings: 0, errors: 0 })
       setActiveView('transactions')
       fetchDashboardData()
@@ -1966,19 +1974,35 @@ export default function Home() {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                    <div className={styles.kpiCard}>
+                    <div 
+                      className={styles.kpiCard}
+                      onClick={() => setImportPreviewFilter('all')}
+                      style={{ cursor: 'pointer', outline: importPreviewFilter === 'all' ? '2px solid var(--text-primary)' : 'none' }}
+                    >
                       <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total Rows</div>
                       <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{importStats.total}</div>
                     </div>
-                    <div className={styles.kpiCard} style={{ borderBottom: '4px solid var(--success-color)' }}>
+                    <div 
+                      className={styles.kpiCard} 
+                      onClick={() => setImportPreviewFilter('valid')}
+                      style={{ cursor: 'pointer', borderBottom: '4px solid var(--success-color)', outline: importPreviewFilter === 'valid' ? '2px solid var(--success-color)' : 'none' }}
+                    >
                       <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Valid</div>
                       <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--success-color)' }}>{importStats.valid}</div>
                     </div>
-                    <div className={styles.kpiCard} style={{ borderBottom: '4px solid var(--warning-color)' }}>
+                    <div 
+                      className={styles.kpiCard} 
+                      onClick={() => setImportPreviewFilter('warning')}
+                      style={{ cursor: 'pointer', borderBottom: '4px solid var(--warning-color)', outline: importPreviewFilter === 'warning' ? '2px solid var(--warning-color)' : 'none' }}
+                    >
                       <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Warnings</div>
                       <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--warning-color)' }}>{importStats.warnings}</div>
                     </div>
-                    <div className={styles.kpiCard} style={{ borderBottom: '4px solid var(--error-color)' }}>
+                    <div 
+                      className={styles.kpiCard} 
+                      onClick={() => setImportPreviewFilter('error')}
+                      style={{ cursor: 'pointer', borderBottom: '4px solid var(--error-color)', outline: importPreviewFilter === 'error' ? '2px solid var(--error-color)' : 'none' }}
+                    >
                       <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Errors</div>
                       <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--error-color)' }}>{importStats.errors}</div>
                     </div>
@@ -1991,7 +2015,7 @@ export default function Home() {
                         <button 
                           className={styles.submitBtn} 
                           style={{ background: 'var(--bg-hover)', color: 'var(--text-primary)', boxShadow: 'none' }}
-                          onClick={() => { setImportFile(null); setImportPreview([]) }}
+                          onClick={() => { setImportFile(null); setImportPreview([]); setImportPreviewFilter('all') }}
                           disabled={isImporting}
                         >
                           Cancel
@@ -2018,7 +2042,7 @@ export default function Home() {
                           </tr>
                         </thead>
                         <tbody>
-                          {importPreview.slice(0, 50).map((row, idx) => (
+                          {importPreview.filter(r => importPreviewFilter === 'all' || r.status === importPreviewFilter).slice(0, 50).map((row, idx) => (
                             <tr key={idx} className={styles.tr}>
                               <td className={styles.td}>
                                 {row.status === 'valid' && <span className={styles.statusBadge} style={{ background: 'var(--success-glow)', color: 'var(--success-color)' }}>Valid</span>}
@@ -2036,9 +2060,9 @@ export default function Home() {
                           ))}
                         </tbody>
                       </table>
-                      {importPreview.length > 50 && (
+                      {importPreview.filter(r => importPreviewFilter === 'all' || r.status === importPreviewFilter).length > 50 && (
                         <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-secondary)', borderTop: '1px solid var(--border-color)' }}>
-                          Showing first 50 rows of {importPreview.length}...
+                          Showing first 50 rows of {importPreview.filter(r => importPreviewFilter === 'all' || r.status === importPreviewFilter).length}...
                         </div>
                       )}
                     </div>
