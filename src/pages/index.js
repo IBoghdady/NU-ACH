@@ -896,13 +896,74 @@ export default function Home() {
 
       toast.success(`Successfully imported ${result.inserted} new transactions. Skipped ${result.skipped} duplicates.`)
       
-      // Reset state and switch view
+      // Fetch existing beneficiaries to extract new ones from transactions
+      let existingData = []
+      let from = 0
+      const limit = 1000
+      let hasMore = true
+      while (hasMore) {
+        const { data, error } = await supabase.from('beneficiaries').select('*').range(from, from + limit - 1)
+        if (error) throw error
+        if (data && data.length > 0) {
+          existingData = [...existingData, ...data]
+          from += limit
+        }
+        if (!data || data.length < limit) {
+          hasMore = false
+        }
+      }
+      
+      const existingMap = new Map()
+      existingData.forEach(b => existingMap.set(b.account_number.toString(), b))
+
+      const newBens = []
+      const conflicts = []
+      const newBensMap = new Set()
+
+      cleanedRows.forEach(row => {
+        const name = row.creditor_name
+        const acc = row.creditor_account_number?.toString()
+        if (!name || !acc) return // skip invalid
+        
+        const status = row.transaction_status
+        if (status && String(status).trim() !== 'Accepted') {
+          return // Skip non-accepted
+        }
+        
+        const newRow = {
+          name: String(name).trim(),
+          account_number: acc.trim(),
+          bank_bic: row.creditor_party_bic?.toString()?.trim() || null,
+          employee_code: null,
+          category: 'Operational'
+        }
+
+        if (existingMap.has(newRow.account_number)) {
+          conflicts.push({ newRow, existingRow: existingMap.get(newRow.account_number), action: 'skip' })
+        } else if (!newBensMap.has(newRow.account_number)) {
+          newBensMap.add(newRow.account_number)
+          newBens.push(newRow)
+        }
+      })
+
+      // Switch views first
       setImportFile(null)
       setImportPreview([])
       setImportPreviewFilter('all')
       setImportStats({ total: 0, valid: 0, warnings: 0, errors: 0 })
       setActiveView('transactions')
       fetchDashboardData()
+
+      // Then trigger beneficiary conflict modal if needed
+      if (newBens.length > 0 || conflicts.length > 0) {
+        setBulkNewBens(newBens)
+        if (conflicts.length > 0) {
+          setBulkConflicts(conflicts)
+          setShowBulkConflictModal(true)
+        } else {
+          await executeBulkInsert(newBens, [])
+        }
+      }
       
     } catch (err) {
       console.error(err)
