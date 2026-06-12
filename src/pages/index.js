@@ -245,16 +245,15 @@ export default function Home() {
 
   const generateACHRow = (ben, amount, comment) => {
     return {
-      TransactionID: 1,
+      NationalID: '',
       CreditorName: ben.name || '',
       CreditorAccountNumber: ben.account_number || '',
       CreditorBank: ben.bank_bic || '',
       CreditorBankBranch: '',
       TransactionAmount: parseFloat(amount) || 0,
-      TransactionPurpose: 'CASH',
       Comments: comment || '',
-      ReceiverEmail: '',
-      SMSMobileNumber: ''
+      Email: '',
+      Mobile: ''
     }
   }
 
@@ -274,7 +273,7 @@ export default function Home() {
     const ws = XLSX.utils.json_to_sheet([row])
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "ACH")
-    XLSX.writeFile(wb, `${selectedBen.name} - ${amount} - ${getFormattedDate()}.xlsx`)
+    XLSX.writeFile(wb, `${selectedBen.name} - ${amount} - ${getFormattedDate()}.csv`)
     setShowSinglePayoutModal(false)
   }
 
@@ -284,26 +283,16 @@ export default function Home() {
       if (!amount) return toast.error(`Please enter an amount for ${ben.name}`)
     }
 
-    const zip = new JSZip()
     const dateStr = getFormattedDate()
-    
-    selectedForPayout.forEach((ben) => {
+    const rows = selectedForPayout.map((ben) => {
       const { amount, comment } = payoutFormData[ben.id] || {}
-      const row = generateACHRow(ben, amount, comment)
-      const ws = XLSX.utils.json_to_sheet([row])
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, "ACH")
-      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-      zip.file(`${ben.name} - ${amount} - ${dateStr}.xlsx`, excelBuffer)
+      return generateACHRow(ben, amount, comment)
     })
 
-    const zipBlob = await zip.generateAsync({ type: 'blob' })
-    const url = URL.createObjectURL(zipBlob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `Group_Payout_${dateStr}.zip`
-    a.click()
-    URL.revokeObjectURL(url)
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "ACH")
+    XLSX.writeFile(wb, `Group_Payout_${dateStr}.csv`)
     
     setShowGroupPayoutModal(false)
     setSelectedForPayout([])
@@ -2505,7 +2494,7 @@ export default function Home() {
               </div>
               <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
                 <button className={styles.submitBtn} style={{ background: 'var(--surface-color)' }} onClick={() => setShowSinglePayoutModal(false)}>Cancel</button>
-                <button className={styles.submitBtn} onClick={handleSingleQuickPayout}>💾 Download ACH</button>
+                <button className={styles.submitBtn} onClick={handleSingleQuickPayout}>💾 Download CSV</button>
               </div>
             </div>
           </div>
@@ -2558,7 +2547,7 @@ export default function Home() {
 
               <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', justifyContent: 'flex-end' }}>
                 <button className={styles.submitBtn} style={{ background: 'var(--surface-color)', flex: 0, padding: '10px 20px' }} onClick={() => setShowGroupPayoutModal(false)}>Cancel</button>
-                <button className={styles.submitBtn} style={{ flex: 0, padding: '10px 20px', whiteSpace: 'nowrap' }} onClick={handleGroupQuickPayout}>🗜️ Export ZIP Archive</button>
+                <button className={styles.submitBtn} style={{ flex: 0, padding: '10px 20px', whiteSpace: 'nowrap' }} onClick={handleGroupQuickPayout}>💾 Download CSV</button>
               </div>
             </div>
           </div>
