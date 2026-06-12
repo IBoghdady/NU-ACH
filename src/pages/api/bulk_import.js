@@ -19,13 +19,22 @@ export default async function handler(req, res) {
     let existingTxIds = new Set()
     
     if (txIds.length > 0) {
-      const { data: existing, error: fetchError } = await supabase
-        .from('transactions')
-        .select('transaction_id')
-        .in('transaction_id', txIds)
+      // Chunk the duplicate check to prevent URL length limits (HTTP 414) in PostgREST
+      const chunkSize = 100
+      for (let i = 0; i < txIds.length; i += chunkSize) {
+        const chunk = txIds.slice(i, i + chunkSize)
+        const { data: existing, error: fetchError } = await supabase
+          .from('transactions')
+          .select('transaction_id')
+          .in('transaction_id', chunk)
+          
+        if (fetchError) {
+          throw new Error('Failed to check duplicates: ' + fetchError.message)
+        }
         
-      if (!fetchError && existing) {
-        existingTxIds = new Set(existing.map(tx => tx.transaction_id))
+        if (existing) {
+          existing.forEach(tx => existingTxIds.add(tx.transaction_id))
+        }
       }
     }
 
