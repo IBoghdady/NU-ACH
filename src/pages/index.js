@@ -7,7 +7,8 @@ import TransactionReceipt from '../components/TransactionReceipt'
 import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import toast from 'react-hot-toast'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts'
+const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e']
 
 const formatDate = (dateVal) => {
   if (!dateVal) return null;
@@ -379,7 +380,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true)
   const [isExporting, setIsExporting] = useState(false)
   const [dashboardError, setDashboardError] = useState('')
-  const [analyticsData, setAnalyticsData] = useState({ topVendors: [], dailyOutflows: [] })
+  const [analyticsData, setAnalyticsData] = useState({ topVendors: [], dailyOutflows: [], categoriesBreakdown: [] })
   
   useEffect(() => {
     if (activeView === 'dashboard') {
@@ -396,7 +397,11 @@ export default function Home() {
           const res = await fetch(`/api/analytics?${queryParams.toString()}`)
           if (res.ok) {
             const data = await res.json()
-            setAnalyticsData({ topVendors: data.topVendors || [], dailyOutflows: data.dailyOutflows || [] })
+            setAnalyticsData({ 
+              topVendors: data.topVendors || [], 
+              dailyOutflows: data.dailyOutflows || [],
+              categoriesBreakdown: data.categoriesBreakdown || []
+            })
           }
         } catch (e) {
           console.error(e)
@@ -1585,6 +1590,13 @@ export default function Home() {
                   <h1>Treasury Analytics</h1>
                   <p className={styles.subtitle}>Executive overview of outbound ACH payments</p>
                 </div>
+                <button 
+                  onClick={() => window.print()} 
+                  className={styles.submitBtn} 
+                  style={{ margin: 0, padding: '10px 20px', borderRadius: '8px', background: '#1e293b', border: '1px solid #3b82f6' }}
+                >
+                  📄 Download PDF Report
+                </button>
               </header>
 
               {/* KPI Cards Grid */}
@@ -1629,22 +1641,31 @@ export default function Home() {
               </section>
 
               {/* Analytics Charts */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
                 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.5rem' }}>
-                  <h3 style={{ marginBottom: '1rem', fontWeight: '600' }}>30-Day Cash Outflow (EGP)</h3>
+                  <h3 style={{ marginBottom: '1rem', fontWeight: '600' }}>Expense Categories Breakdown</h3>
                   <div style={{ width: '100%', height: '300px' }}>
                     <ResponsiveContainer>
-                      <LineChart data={analyticsData.dailyOutflows} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
-                        <XAxis dataKey="date" stroke="var(--text-secondary)" fontSize={12} tickFormatter={(tick) => tick.substring(5)} />
-                        <YAxis stroke="var(--text-secondary)" fontSize={12} tickFormatter={(tick) => `£${(tick/1000).toFixed(0)}k`} />
+                      <PieChart>
+                        <Pie
+                          data={analyticsData.categoriesBreakdown}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={100}
+                          paddingAngle={5}
+                          dataKey="value"
+                        >
+                          {analyticsData.categoriesBreakdown?.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                          ))}
+                        </Pie>
                         <RechartsTooltip 
                           contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px' }}
-                          formatter={(value) => [formatEGP(value), 'Amount']}
-                          labelStyle={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}
+                          formatter={(value) => [formatEGP(value), 'Total Amount']}
                         />
-                        <Line type="monotone" dataKey="amount" stroke="var(--accent-color)" strokeWidth={3} dot={{ r: 4, fill: '#1e293b', stroke: '#3b82f6', strokeWidth: 2 }} activeDot={{ r: 6, fill: '#3b82f6' }} />
-                      </LineChart>
+                        <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: '12px', color: 'var(--text-primary)' }} />
+                      </PieChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
@@ -1665,6 +1686,25 @@ export default function Home() {
                         />
                         <Bar dataKey="value" fill="var(--success-color)" radius={[0, 4, 4, 0]} barSize={24} />
                       </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.5rem', gridColumn: '1 / -1' }}>
+                  <h3 style={{ marginBottom: '1rem', fontWeight: '600' }}>30-Day Cash Outflow (EGP)</h3>
+                  <div style={{ width: '100%', height: '300px' }}>
+                    <ResponsiveContainer>
+                      <LineChart data={analyticsData.dailyOutflows} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                        <XAxis dataKey="date" stroke="var(--text-secondary)" fontSize={12} tickFormatter={(tick) => tick.substring(5)} />
+                        <YAxis stroke="var(--text-secondary)" fontSize={12} tickFormatter={(tick) => `£${(tick/1000).toFixed(0)}k`} />
+                        <RechartsTooltip 
+                          contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px' }}
+                          formatter={(value) => [formatEGP(value), 'Amount']}
+                          labelStyle={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}
+                        />
+                        <Line type="monotone" dataKey="amount" stroke="var(--accent-color)" strokeWidth={3} dot={{ r: 4, fill: '#1e293b', stroke: '#3b82f6', strokeWidth: 2 }} activeDot={{ r: 6, fill: '#3b82f6' }} />
+                      </LineChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
