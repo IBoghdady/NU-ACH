@@ -255,14 +255,16 @@ export default function Home() {
         if (result.success) {
           setPayoutPreview(result.data)
           setPayoutStats(result.stats)
+          toast.success(`تمت معالجة الملف بنجاح! جاهز للتصدير.`)
         } else {
-          toast.error('Error processing file: ' + result.error)
+          toast.error('خطأ في معالجة الملف: ' + result.error)
         }
       } catch (err) {
         console.error(err)
-        toast.error('Error parsing file. Please ensure it is a valid Excel or CSV file.')
+        toast.error('حدث خطأ أثناء قراءة الملف. يرجى التأكد من الصيغة.')
       } finally {
         setIsPayoutProcessing(false)
+        e.target.value = ''
       }
     }
     reader.readAsArrayBuffer(file)
