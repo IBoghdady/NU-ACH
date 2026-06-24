@@ -231,6 +231,12 @@ export default function Home() {
         const ws = wb.Sheets[wsname]
         const rawData = XLSX.utils.sheet_to_json(ws)
         
+        if (!rawData || rawData.length === 0) {
+          toast.error('The uploaded file is empty. Please add data to the template before uploading.')
+          setIsPayoutProcessing(false)
+          return
+        }
+
         // Map common column variations
         const mappedData = rawData.map(row => ({
           employeeId: row['Employee ID'] || row['EmployeeID'] || row['EMP ID'] || row['Employee Code'] || '',
