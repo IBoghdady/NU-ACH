@@ -66,6 +66,7 @@ export default function Home() {
   const [authError, setAuthError] = useState(null)
   const [isAuthLoading, setIsAuthLoading] = useState(false)
   const [isInitialCheck, setIsInitialCheck] = useState(true)
+  const [authMode, setAuthMode] = useState('login') // 'login', 'forgot_password', 'update_password'
 
   // Theme State
   const [theme, setTheme] = useState('dark')
@@ -91,6 +92,9 @@ export default function Home() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
+      if (_event === 'PASSWORD_RECOVERY') {
+        setAuthMode('update_password')
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -105,6 +109,45 @@ export default function Home() {
       password: authPassword,
     })
     if (error) setAuthError(error.message)
+    setIsAuthLoading(false)
+  }
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault()
+    if (!authEmail) {
+      setAuthError('Please enter your email address.')
+      return
+    }
+    setIsAuthLoading(true)
+    setAuthError(null)
+    const { error } = await supabase.auth.resetPasswordForEmail(authEmail, {
+      redirectTo: window.location.origin,
+    })
+    if (error) {
+      setAuthError(error.message)
+    } else {
+      toast.success('Password reset link sent to your email.')
+      setAuthMode('login')
+    }
+    setIsAuthLoading(false)
+  }
+
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault()
+    if (!authPassword) {
+      setAuthError('Please enter a new password.')
+      return
+    }
+    setIsAuthLoading(true)
+    setAuthError(null)
+    const { error } = await supabase.auth.updateUser({ password: authPassword })
+    if (error) {
+      setAuthError(error.message)
+    } else {
+      toast.success('Password updated successfully.')
+      setAuthMode('login')
+      setAuthPassword('')
+    }
     setIsAuthLoading(false)
   }
 
@@ -1339,56 +1382,167 @@ export default function Home() {
             </div>
           )}
           
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <input
-              type="email"
-              placeholder="Corporate Email"
-              value={authEmail}
-              onChange={(e) => setAuthEmail(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '14px 16px',
-                borderRadius: '12px',
-                border: '1px solid var(--border-color)',
-                background: 'var(--input-bg)',
-                color: 'var(--text-primary)',
-                outline: 'none',
-                fontSize: '1rem'
-              }}
-              required
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={authPassword}
-              onChange={(e) => setAuthPassword(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '14px 16px',
-                borderRadius: '12px',
-                border: '1px solid var(--border-color)',
-                background: 'var(--input-bg)',
-                color: 'var(--text-primary)',
-                outline: 'none',
-                fontSize: '1rem'
-              }}
-              required
-            />
-            <button type="submit" disabled={isAuthLoading} style={{ 
-              marginTop: '1rem', 
-              background: 'var(--accent-color)', 
-              color: 'var(--text-primary)', 
-              border: 'none', 
-              padding: '14px', 
-              borderRadius: '12px', 
-              cursor: isAuthLoading ? 'wait' : 'pointer', 
-              fontWeight: '600', 
-              fontSize: '1rem', 
-              transition: 'all 0.2s' 
-            }}>
-              {isAuthLoading ? 'Authenticating...' : 'Secure Sign In'}
-            </button>
-          </form>
+          {authMode === 'login' && (
+            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <input
+                type="email"
+                placeholder="Corporate Email"
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  borderRadius: '12px',
+                  border: '1px solid var(--border-color)',
+                  background: 'var(--input-bg)',
+                  color: 'var(--text-primary)',
+                  outline: 'none',
+                  fontSize: '1rem'
+                }}
+                required
+              />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    borderRadius: '12px',
+                    border: '1px solid var(--border-color)',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
+                    outline: 'none',
+                    fontSize: '1rem'
+                  }}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => { setAuthMode('forgot_password'); setAuthError(null); }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--accent-color)',
+                    fontSize: '0.85rem',
+                    textAlign: 'right',
+                    cursor: 'pointer',
+                    padding: 0
+                  }}
+                >
+                  Forgot Password?
+                </button>
+              </div>
+              <button type="submit" disabled={isAuthLoading} style={{ 
+                marginTop: '0.5rem', 
+                background: 'var(--accent-color)', 
+                color: 'var(--text-primary)', 
+                border: 'none', 
+                padding: '14px', 
+                borderRadius: '12px', 
+                cursor: isAuthLoading ? 'wait' : 'pointer', 
+                fontWeight: '600', 
+                fontSize: '1rem', 
+                transition: 'all 0.2s' 
+              }}>
+                {isAuthLoading ? 'Authenticating...' : 'Secure Sign In'}
+              </button>
+            </form>
+          )}
+
+          {authMode === 'forgot_password' && (
+            <form onSubmit={handleResetPassword} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '0.5rem', textAlign: 'center' }}>
+                Enter your email address and we will send you a password reset link.
+              </p>
+              <input
+                type="email"
+                placeholder="Corporate Email"
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  borderRadius: '12px',
+                  border: '1px solid var(--border-color)',
+                  background: 'var(--input-bg)',
+                  color: 'var(--text-primary)',
+                  outline: 'none',
+                  fontSize: '1rem'
+                }}
+                required
+              />
+              <button type="submit" disabled={isAuthLoading} style={{ 
+                marginTop: '0.5rem', 
+                background: 'var(--accent-color)', 
+                color: 'var(--text-primary)', 
+                border: 'none', 
+                padding: '14px', 
+                borderRadius: '12px', 
+                cursor: isAuthLoading ? 'wait' : 'pointer', 
+                fontWeight: '600', 
+                fontSize: '1rem', 
+                transition: 'all 0.2s' 
+              }}>
+                {isAuthLoading ? 'Sending...' : 'Send Reset Link'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAuthMode('login'); setAuthError(null); }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  fontSize: '0.9rem',
+                  cursor: 'pointer',
+                  marginTop: '0.5rem'
+                }}
+              >
+                Back to Sign In
+              </button>
+            </form>
+          )}
+
+          {authMode === 'update_password' && (
+            <form onSubmit={handleUpdatePassword} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '0.5rem', textAlign: 'center' }}>
+                Please enter your new password below.
+              </p>
+              <input
+                type="password"
+                placeholder="New Password"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  borderRadius: '12px',
+                  border: '1px solid var(--border-color)',
+                  background: 'var(--input-bg)',
+                  color: 'var(--text-primary)',
+                  outline: 'none',
+                  fontSize: '1rem'
+                }}
+                required
+              />
+              <button type="submit" disabled={isAuthLoading} style={{ 
+                marginTop: '0.5rem', 
+                background: 'var(--accent-color)', 
+                color: 'var(--text-primary)', 
+                border: 'none', 
+                padding: '14px', 
+                borderRadius: '12px', 
+                cursor: isAuthLoading ? 'wait' : 'pointer', 
+                fontWeight: '600', 
+                fontSize: '1rem', 
+                transition: 'all 0.2s' 
+              }}>
+                {isAuthLoading ? 'Updating...' : 'Update Password'}
+              </button>
+            </form>
+          )}
         </div>
       </div>
     )
