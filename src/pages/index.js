@@ -217,7 +217,8 @@ export default function Home() {
   const [payoutStats, setPayoutStats] = useState(null)
 
   const handlePayoutFileUpload = (e) => {
-    const file = e.target.files[0]
+    const fileInput = e.target
+    const file = fileInput.files[0]
     if (!file) return
     setPayoutFile(file)
     setIsPayoutProcessing(true)
@@ -234,6 +235,7 @@ export default function Home() {
         if (!rawData || rawData.length === 0) {
           toast.error('The uploaded file is empty. Please add data to the template before uploading.')
           setIsPayoutProcessing(false)
+          if (fileInput) fileInput.value = ''
           return
         }
 
@@ -264,7 +266,7 @@ export default function Home() {
         toast.error('حدث خطأ أثناء قراءة الملف. يرجى التأكد من الصيغة.')
       } finally {
         setIsPayoutProcessing(false)
-        e.target.value = ''
+        if (fileInput) fileInput.value = ''
       }
     }
     reader.readAsArrayBuffer(file)
