@@ -217,8 +217,7 @@ export default function Home() {
   const [payoutStats, setPayoutStats] = useState(null)
 
   const handlePayoutFileUpload = (e) => {
-    const fileInput = e.target
-    const file = fileInput.files[0]
+    const file = e.target.files[0]
     if (!file) return
     setPayoutFile(file)
     setIsPayoutProcessing(true)
@@ -232,13 +231,6 @@ export default function Home() {
         const ws = wb.Sheets[wsname]
         const rawData = XLSX.utils.sheet_to_json(ws)
         
-        if (!rawData || rawData.length === 0) {
-          toast.error('The uploaded file is empty. Please add data to the template before uploading.')
-          setIsPayoutProcessing(false)
-          if (fileInput) fileInput.value = ''
-          return
-        }
-
         // Map common column variations
         const mappedData = rawData.map(row => ({
           employeeId: row['Employee ID'] || row['EmployeeID'] || row['EMP ID'] || row['Employee Code'] || '',
@@ -257,55 +249,32 @@ export default function Home() {
         if (result.success) {
           setPayoutPreview(result.data)
           setPayoutStats(result.stats)
-          toast.success(`تمت معالجة الملف بنجاح! جاهز للتصدير.`)
         } else {
-          toast.error('خطأ في معالجة الملف: ' + result.error)
+          toast.error('Error processing file: ' + result.error)
         }
       } catch (err) {
         console.error(err)
-        toast.error('حدث خطأ أثناء قراءة الملف. يرجى التأكد من الصيغة.')
+        toast.error('Error parsing file. Please ensure it is a valid Excel or CSV file.')
       } finally {
         setIsPayoutProcessing(false)
-        if (fileInput) fileInput.value = ''
       }
     }
     reader.readAsArrayBuffer(file)
   }
 
-  const exportCIB = () => {
+  const exportPayoutToExcel = () => {
     if (!payoutPreview.length) return
     
     // Remove internal fields used for UI state
     const exportData = payoutPreview.map(row => {
-      const { _id, _status, _originalEmployeeId, NationalID, ReceiverEmail, SMSMobileNumber, ...rest } = row
+      const { _id, _status, _originalEmployeeId, ...rest } = row
       return rest
     })
     
     const ws = XLSX.utils.json_to_sheet(exportData)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "ACH Payouts")
-    XLSX.writeFile(wb, `CIB_Payout_${new Date().toISOString().slice(0, 10)}.xlsx`)
-  }
-
-  const exportBanqueMisr = () => {
-    if (!payoutPreview.length) return
-    
-    const exportData = payoutPreview.map(row => ({
-      NationalID: row.NationalID || '',
-      CreditorName: row.CreditorName || '',
-      CreditorAccountNumber: row.CreditorAccountNumber || '',
-      CreditorBank: row.CreditorBank || '',
-      CreditorBankBranch: row.CreditorBankBranch || '',
-      TransactionAmount: row.TransactionAmount || 0,
-      Comments: row.Comments || '',
-      Email: row.ReceiverEmail || '',
-      Mobile: row.SMSMobileNumber || ''
-    }))
-    
-    const ws = XLSX.utils.json_to_sheet(exportData)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "ACH Payouts")
-    XLSX.writeFile(wb, `BanqueMisr_Payout_${new Date().toISOString().slice(0, 10)}.csv`, { bookType: 'csv' })
+    XLSX.writeFile(wb, `ACH_Payout_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
   const downloadPayoutTemplate = () => {
@@ -2671,42 +2640,22 @@ export default function Home() {
                       </div>
                     )}
 
-                    <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
-                      <button 
-                        onClick={exportCIB}
-                        disabled={!payoutPreview.length}
-                        className={styles.submitBtn}
-                        style={{
-                          flex: 1,
-                          margin: 0,
-                          background: payoutPreview.length ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : '#334155',
-                          boxShadow: payoutPreview.length ? '0 4px 15px rgba(245, 158, 11, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)' : 'none',
-                          color: payoutPreview.length ? 'white' : '#94a3b8',
-                          opacity: payoutPreview.length ? 1 : 0.5,
-                          fontSize: '0.95rem',
-                          padding: '1rem'
-                        }}
-                      >
-                        <span style={{ marginRight: '0.5rem' }}>🏦</span> CIB (.xlsx)
-                      </button>
-                      <button 
-                        onClick={exportBanqueMisr}
-                        disabled={!payoutPreview.length}
-                        className={styles.submitBtn}
-                        style={{
-                          flex: 1,
-                          margin: 0,
-                          background: payoutPreview.length ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : '#334155',
-                          boxShadow: payoutPreview.length ? '0 4px 15px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)' : 'none',
-                          color: payoutPreview.length ? 'white' : '#94a3b8',
-                          opacity: payoutPreview.length ? 1 : 0.5,
-                          fontSize: '0.95rem',
-                          padding: '1rem'
-                        }}
-                      >
-                        <span style={{ marginRight: '0.5rem' }}>🏦</span> Banque Misr (.csv)
-                      </button>
-                    </div>
+                    <button 
+                      onClick={exportPayoutToExcel}
+                      disabled={!payoutPreview.length}
+                      className={styles.submitBtn}
+                      style={{
+                        marginTop: '1.5rem',
+                        background: payoutPreview.length ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : '#334155',
+                        boxShadow: payoutPreview.length ? '0 4px 15px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)' : 'none',
+                        color: payoutPreview.length ? 'white' : '#94a3b8',
+                        opacity: payoutPreview.length ? 1 : 0.5,
+                        fontSize: '1.05rem',
+                        padding: '1rem'
+                      }}
+                    >
+                      <span style={{ marginRight: '0.5rem' }}>💾</span> Generate ACH Form
+                    </button>
                   </div>
                 </div>
               </div>
