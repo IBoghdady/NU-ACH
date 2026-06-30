@@ -1197,7 +1197,8 @@ export default function Home() {
           name: newBenName,
           account_number: newBenAcc,
           bank_bic: newBenBic,
-          category: newBenCategory
+          category: newBenCategory,
+          employee_code: newBenCategory === 'Staff' ? newBenEmpCode : null
         })
       })
 
@@ -1206,10 +1207,11 @@ export default function Home() {
         throw new Error(data.error || 'Failed to register beneficiary.')
       }
 
-      toast.success(`Beneficiary "${newBenName}" registered successfully!`); setShowAddBen(false)
+      toast.success(`Beneficiary "${newBenName}" registered successfully!`)
       setNewBenName('')
       setNewBenAcc('')
       setNewBenBic('')
+      setNewBenEmpCode('')
       setNewBenCategory('Operational')
       setShowAddBen(false)
       fetchBeneficiaries()
@@ -2114,6 +2116,20 @@ export default function Home() {
                         <option value="Staff">Staff & Salaries</option>
                       </select>
                     </div>
+
+                    {newBenCategory === 'Staff' && (
+                      <div className={styles.formGroup}>
+                        <label className={styles.label}>Employee ID (Required for Payroll)</label>
+                        <input 
+                          type="text" 
+                          value={newBenEmpCode} 
+                          onChange={(e) => setNewBenEmpCode(e.target.value)} 
+                          className={styles.inputField}
+                          placeholder="e.g. EMP-00123"
+                          required
+                        />
+                      </div>
+                    )}
 
                     <div style={{ gridColumn: 'span 2' }}>
                       <button type="submit" className={styles.submitBtn}>
