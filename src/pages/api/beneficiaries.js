@@ -32,7 +32,7 @@ export default async function handler(req, res) {
       }
 
       if (employeeCode.trim()) {
-        query = query.eq('employee_code', employeeCode.trim())
+        query = query.ilike('employee_code', `%${employeeCode.trim()}%`)
       }
 
       let { data: beneficiaries, count, error } = await query
@@ -76,7 +76,7 @@ export default async function handler(req, res) {
 
   // POST: Create a new beneficiary
   if (req.method === 'POST') {
-    const { name, account_number, bank_bic, category = 'Operational' } = req.body
+    const { name, account_number, bank_bic, category = 'Operational', employee_code } = req.body
 
     if (!name || !account_number) {
       return res.status(400).json({ error: 'Name and Account Number are required.' })
@@ -89,7 +89,8 @@ export default async function handler(req, res) {
           name: name.trim(),
           account_number: account_number.trim(),
           bank_bic: bank_bic ? bank_bic.trim() : null,
-          category
+          category,
+          employee_code: employee_code ? employee_code.trim() : null
         }])
         .select()
 
