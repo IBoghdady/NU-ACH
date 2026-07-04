@@ -23,7 +23,8 @@ export default async function handler(req, res) {
     sortBy = 'batch_settlement_date',
     sortOrder = 'desc',
     comment = '',
-    bankAccount = ''
+    bankAccount = '',
+    sourceBank = 'All'
   } = req.query
 
   const pageNum = parseInt(page, 10)
@@ -60,6 +61,12 @@ export default async function handler(req, res) {
     if (bankAccount.trim()) {
       const acc = bankAccount.trim()
       query = query.or(`creditor_account_number.ilike.%${acc}%,debtor_account_number.ilike.%${acc}%`)
+    }
+
+    if (sourceBank === 'Banque Misr') {
+      query = query.eq('batch_purpose', 'Banque Misr')
+    } else if (sourceBank === 'CIB') {
+      query = query.neq('batch_purpose', 'Banque Misr')
     }
 
     query = query
