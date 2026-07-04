@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { search, status, startDate, endDate, comment, bankAccount } = req.query
+  const { search, status, startDate, endDate, comment, bankAccount, sourceBank } = req.query
 
   try {
     const { data: bens } = await supabase.from('beneficiaries').select('account_number, category')
@@ -54,6 +54,11 @@ export default async function handler(req, res) {
     }
     if (endDate) {
       query = query.lte('batch_settlement_date', endDate)
+    }
+    if (sourceBank === 'Banque Misr') {
+      query = query.eq('batch_purpose', 'Banque Misr')
+    } else if (sourceBank === 'CIB') {
+      query = query.neq('batch_purpose', 'Banque Misr')
     }
 
     const { data: txs, error: txErr } = await query
