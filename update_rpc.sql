@@ -1,6 +1,11 @@
 -- Run this in Supabase SQL Editor to update the Analytics logic to support the new filters
+-- First DROP the old function, then CREATE the new one
 
-create or replace function get_transaction_dashboard_stats(
+DROP FUNCTION IF EXISTS get_transaction_dashboard_stats(text, text, text, text);
+DROP FUNCTION IF EXISTS get_transaction_dashboard_stats(text, text, text, text, text, text);
+DROP FUNCTION IF EXISTS get_transaction_dashboard_stats(text, text, text, text, text, text, text);
+
+CREATE OR REPLACE FUNCTION get_transaction_dashboard_stats(
   search_term text default '',
   status_filter text default 'All',
   start_date text default '',
@@ -9,68 +14,68 @@ create or replace function get_transaction_dashboard_stats(
   bank_account_filter text default '',
   source_bank_filter text default 'All'
 )
-returns json as $body
-declare
+RETURNS json AS $$
+DECLARE
   total_sum numeric;
   total_cnt bigint;
   accepted_cnt bigint;
   rejected_cnt bigint;
   returned_cnt bigint;
   query_filter text := '';
-begin
+BEGIN
   -- Build the filter string dynamically
-  if search_term <> '' then
-    query_filter := query_filter || ' and (creditor_name ilike ' || quote_literal('%' || search_term || '%') || 
-                              ' or batch_id ilike ' || quote_literal('%' || search_term || '%') || 
-                              ' or transaction_id ilike ' || quote_literal('%' || search_term || '%') || ')';
-  end if;
+  IF search_term <> '' THEN
+    query_filter := query_filter || ' AND (creditor_name ILIKE ' || quote_literal('%' || search_term || '%') || 
+                              ' OR batch_id ILIKE ' || quote_literal('%' || search_term || '%') || 
+                              ' OR transaction_id ILIKE ' || quote_literal('%' || search_term || '%') || ')';
+  END IF;
   
-  if status_filter <> 'All' then
-    query_filter := query_filter || ' and transaction_status = ' || quote_literal(status_filter);
-  end if;
+  IF status_filter <> 'All' THEN
+    query_filter := query_filter || ' AND transaction_status = ' || quote_literal(status_filter);
+  END IF;
   
-  if start_date <> '' then
-    query_filter := query_filter || ' and batch_settlement_date >= ' || quote_literal(start_date)::date;
-  end if;
+  IF start_date <> '' THEN
+    query_filter := query_filter || ' AND batch_settlement_date >= ' || quote_literal(start_date) || '::date';
+  END IF;
   
-  if end_date <> '' then
-    query_filter := query_filter || ' and batch_settlement_date <= ' || quote_literal(end_date)::date;
-  end if;
+  IF end_date <> '' THEN
+    query_filter := query_filter || ' AND batch_settlement_date <= ' || quote_literal(end_date) || '::date';
+  END IF;
 
-  if comment_filter <> '' then
-    query_filter := query_filter || ' and comment ilike ' || quote_literal('%' || comment_filter || '%');
-  end if;
+  IF comment_filter <> '' THEN
+    query_filter := query_filter || ' AND comment ILIKE ' || quote_literal('%' || comment_filter || '%');
+  END IF;
 
-  if bank_account_filter <> '' then
-    query_filter := query_filter || ' and (creditor_account_number ilike ' || quote_literal('%' || bank_account_filter || '%') || 
-                                    ' or debtor_account_number ilike ' || quote_literal('%' || bank_account_filter || '%') || ')';
-  end if;
+  IF bank_account_filter <> '' THEN
+    query_filter := query_filter || ' AND (creditor_account_number ILIKE ' || quote_literal('%' || bank_account_filter || '%') || 
+                                    ' OR debtor_account_number ILIKE ' || quote_literal('%' || bank_account_filter || '%') || ')';
+  END IF;
 
-  if source_bank_filter = 'Banque Misr' then
-    query_filter := query_filter || ' and batch_purpose = ' || quote_literal('Banque Misr');
-  elsif source_bank_filter = 'CIB' then
-    query_filter := query_filter || ' and coalesce(batch_purpose, '''') <> ' || quote_literal('Banque Misr');
-  end if;
+  IF source_bank_filter = 'Banque Misr' THEN
+    query_filter := query_filter || ' AND batch_purpose = ' || quote_literal('Banque Misr');
+  ELSIF source_bank_filter = 'CIB' THEN
+    query_filter := query_filter || ' AND COALESCE(batch_purpose, '''') <> ' || quote_literal('Banque Misr');
+  END IF;
 
   -- Run sum and counts
-  execute 'select coalesce(sum(transaction_amount), 0), count(*) from transactions where 1=1' || query_filter 
-    into total_sum, total_cnt;
+  EXECUTE 'SELECT COALESCE(SUM(transaction_amount), 0), COUNT(*) FROM transactions WHERE 1=1' || query_filter 
+    INTO total_sum, total_cnt;
     
-  execute 'select count(*) from transactions where transaction_status = ''Accepted''' || query_filter 
-    into accepted_cnt;
+  EXECUTE 'SELECT COUNT(*) FROM transactions WHERE transaction_status = ''Accepted''' || query_filter 
+    INTO accepted_cnt;
     
-  execute 'select count(*) from transactions where transaction_status = ''Rejected''' || query_filter 
-    into rejected_cnt;
+  EXECUTE 'SELECT COUNT(*) FROM transactions WHERE transaction_status = ''Rejected''' || query_filter 
+    INTO rejected_cnt;
     
-  execute 'select count(*) from transactions where transaction_status = ''Returned''' || query_filter 
-    into returned_cnt;
+  EXECUTE 'SELECT COUNT(*) FROM transactions WHERE transaction_status = ''Returned''' || query_filter 
+    INTO returned_cnt;
 
-  return json_build_object(
+  RETURN json_build_object(
     'totalVolume', total_sum,
     'totalCount', total_cnt,
     'acceptedCount', accepted_cnt,
     'rejectedCount', rejected_cnt,
     'returnedCount', returned_cnt
   );
-end;
-$body language plpgsql security definer;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
