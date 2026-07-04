@@ -902,7 +902,7 @@ export default function Home() {
         let totalAmount = 0
         let countAmounts = 0
         rawData.forEach(row => {
-          const amt = cleanAmount(row['Transaction Amount'] || row['Amount'] || row['transaction_amount'])
+          const amt = cleanAmount(row['Transaction Amount'] || row['Amount'] || row['transaction_amount'] || row['Payment value'] || row['Total debit value'])
           if (!isNaN(amt) && amt > 0) {
             totalAmount += amt
             countAmounts++
@@ -911,9 +911,12 @@ export default function Home() {
         const avgAmount = countAmounts > 0 ? totalAmount / countAmounts : 0
 
         const previewData = rawData.map((row, index) => {
+          const isMisr = ('Payment value' in row) || ('Total debit value' in row) || ('National ID' in row);
+          const source_bank = isMisr ? 'Banque Misr' : 'CIB';
+          
           const creditor_name = String(row['Creditor Name'] || row['creditor_name'] || row['Name'] || '').trim()
-          const creditor_account_number = String(row['Creditor Account Number'] || row['creditor_account_number'] || row['Account Number'] || '').trim()
-          const transaction_amount = cleanAmount(row['Transaction Amount'] || row['Amount'] || row['transaction_amount'])
+          const creditor_account_number = String(row['Creditor Account Number'] || row['creditor_account_number'] || row['Account Number'] || row['Account NO'] || '').trim()
+          const transaction_amount = cleanAmount(row['Transaction Amount'] || row['Amount'] || row['transaction_amount'] || row['Payment value'] || row['Total debit value'])
           
           let status = 'valid'
           let errors = []
@@ -932,26 +935,27 @@ export default function Home() {
           return {
             id: index,
             batch_id: String(row['Batch ID'] || row['batch_id'] || '').trim() || `IMPORT-${new Date().toISOString().split('T')[0]}`,
-            batch_settlement_date: formatDate(row['Batch Settlement Date'] || row['batch_settlement_date'] || row['Date']) || new Date().toISOString().split('T')[0],
-            batch_purpose: String(row['Batch Purpose'] || row['batch_purpose'] || '').trim() || null,
-            batch_currency: String(row['Batch Currency'] || row['batch_currency'] || '').trim() || 'EGP',
+            batch_settlement_date: formatDate(row['Batch Settlement Date'] || row['batch_settlement_date'] || row['Date'] || row['Submission Date'] || row['Debit Date']) || new Date().toISOString().split('T')[0],
+            batch_purpose: String(row['Batch Purpose'] || row['batch_purpose'] || '').trim() || source_bank,
+            batch_currency: String(row['Batch Currency'] || row['batch_currency'] || row['Payment Currency'] || '').trim() || 'EGP',
             instruction_identification: String(row['Instruction Identification'] || row['instruction_identification'] || '').trim() || null,
             end_to_end_identifier: String(row['End To End Identifier'] || row['end_to_end_identifier'] || '').trim() || null,
             transaction_id: String(row['Transaction ID'] || row['transaction_id'] || '').trim() || `TX-IMP-${Date.now()}-${index}`,
             transaction_amount,
-            debtor_name: String(row['Debtor Name'] || row['debtor_name'] || '').trim() || null,
+            debtor_name: String(row['Debtor Name'] || row['debtor_name'] || row['Who will pay'] || '').trim() || null,
             debtor_account_number: String(row['Debtor Account Number'] || row['debtor_account_number'] || '').trim() || null,
             debtor_party_bic: String(row['Debtor Party Bic'] || row['debtor_party_bic'] || '').trim() || null,
             creditor_name,
             creditor_account_number,
-            creditor_party_bic: String(row['Creditor Party Bic'] || row['creditor_party_bic'] || '').trim() || null,
-            transaction_purpose: String(row['Transaction Purpose'] || row['transaction_purpose'] || row['Purpose'] || '').trim() || null,
-            comment: String(row['Comment'] || row['comment'] || '').trim() || null,
-            transaction_status: String(row['Transaction Status'] || row['transaction_status'] || row['Status'] || '').trim() || 'Accepted',
+            creditor_party_bic: String(row['Creditor Party Bic'] || row['creditor_party_bic'] || row['Creditor Bank SWIFT Code'] || '').trim() || null,
+            transaction_purpose: String(row['Transaction Purpose'] || row['transaction_purpose'] || row['Purpose'] || row['Payment Type'] || '').trim() || null,
+            comment: String(row['Comment'] || row['comment'] || row['National ID'] || '').trim() || null,
+            transaction_status: String(row['Transaction Status'] || row['transaction_status'] || row['Status'] || '').trim().replace(/^ACCEPTED$/i, 'Accepted').replace(/^REJECTED$/i, 'Rejected').replace(/^RETURNED$/i, 'Returned') || 'Accepted',
             receiving_date: formatDate(row['Receiving Date'] || row['receiving_date']) || null,
             transaction_isostatus_reason: String(row['Transaction ISoStatus Reason'] || row['transaction_isostatus_reason'] || '').trim() || null,
             is_printed: cleanIsPrinted(row['IsPrinted'] || row['is_printed']),
             isostatus_description: String(row['ISOStatus Description'] || row['isostatus_description'] || '').trim() || null,
+            source_bank,
             status,
             errors
           }
@@ -986,7 +990,7 @@ export default function Home() {
     }
 
     const cleanedRows = validRows.map(row => {
-      const { id, status, errors, ...dbRow } = row
+      const { id, status, errors, source_bank, ...dbRow } = row
       return dbRow
     })
 
@@ -1910,6 +1914,7 @@ export default function Home() {
                         <thead>
                           <tr>
                             <th className={styles.th}>Date</th>
+                            <th className={styles.th}>Source</th>
                             <th className={styles.th}>Creditor Name</th>
                             <th className={styles.th}>Creditor Account</th>
                             <th className={styles.th}>Transaction ID</th>
@@ -1924,6 +1929,9 @@ export default function Home() {
                             <tr key={tx.id} className={styles.tr}>
                               <td className={styles.td}>
                                 {tx.batch_settlement_date ? new Date(tx.batch_settlement_date).toLocaleDateString('en-EG', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
+                              </td>
+                              <td className={styles.td}>
+                                {tx.batch_purpose === 'Banque Misr' ? <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.8rem' }}>Banque Misr</span> : <span style={{ color: '#3b82f6', fontWeight: 'bold', fontSize: '0.8rem' }}>CIB</span>}
                               </td>
                               <td className={styles.td} style={{ fontWeight: '500' }}>{tx.creditor_name || 'N/A'}</td>
                               <td className={styles.td} style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
@@ -2375,6 +2383,7 @@ export default function Home() {
                         <thead>
                           <tr>
                             <th className={styles.th}>Status</th>
+                            <th className={styles.th}>Source</th>
                             <th className={styles.th}>Creditor Name</th>
                             <th className={styles.th}>Account Number</th>
                             <th className={styles.th}>Amount</th>
@@ -2389,6 +2398,9 @@ export default function Home() {
                                 {row.status === 'valid' && <span className={styles.statusBadge} style={{ background: 'var(--success-glow)', color: 'var(--success-color)' }}>Valid</span>}
                                 {row.status === 'warning' && <span className={styles.statusBadge} style={{ background: 'var(--warning-glow)', color: 'var(--warning-color)' }}>Warning</span>}
                                 {row.status === 'error' && <span className={styles.statusBadge} style={{ background: 'var(--error-glow)', color: 'var(--error-color)' }}>Error</span>}
+                              </td>
+                              <td className={styles.td}>
+                                {row.source_bank === 'Banque Misr' ? <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.8rem' }}>Banque Misr</span> : <span style={{ color: '#3b82f6', fontWeight: 'bold', fontSize: '0.8rem' }}>CIB</span>}
                               </td>
                               <td className={styles.td} style={{ fontWeight: '500' }}>{row.creditor_name}</td>
                               <td className={styles.td}>{row.creditor_account_number}</td>
