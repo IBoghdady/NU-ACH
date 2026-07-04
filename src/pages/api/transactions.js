@@ -95,7 +95,8 @@ export default async function handler(req, res) {
         start_date: startDate,
         end_date: endDate,
         comment_filter: comment.trim(),
-        bank_account_filter: bankAccount.trim()
+        bank_account_filter: bankAccount.trim(),
+        source_bank_filter: sourceBank
       })
 
       if (!statsError && statsData) {
