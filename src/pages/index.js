@@ -414,6 +414,7 @@ export default function Home() {
   const [commentFilter, setCommentFilter] = useState('')
   const [bankAccountFilter, setBankAccountFilter] = useState('')
   const [status, setStatus] = useState('All')
+  const [sourceBank, setSourceBank] = useState('All')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [page, setPage] = useState(1)
@@ -434,6 +435,7 @@ export default function Home() {
             comment: commentFilter,
             bankAccount: bankAccountFilter,
             status: status,
+            sourceBank: sourceBank,
             startDate: startDate,
             endDate: endDate
           })
@@ -452,7 +454,7 @@ export default function Home() {
       }
       fetchAnalytics()
     }
-  }, [activeView, search, commentFilter, bankAccountFilter, status, startDate, endDate])
+  }, [activeView, search, commentFilter, bankAccountFilter, status, sourceBank, startDate, endDate])
 
   // --- Functions ---Dashboard Transactions
   const fetchDashboardData = async () => {
@@ -466,6 +468,7 @@ export default function Home() {
         comment: commentFilter,
         bankAccount: bankAccountFilter,
         status: status,
+        sourceBank: sourceBank,
         startDate: startDate,
         endDate: endDate
       })
@@ -490,7 +493,7 @@ export default function Home() {
       fetchDashboardData()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, status, startDate, endDate, activeView])
+  }, [page, status, sourceBank, startDate, endDate, activeView])
 
   // Debounced search trigger for Dashboard
   useEffect(() => {
@@ -529,6 +532,11 @@ export default function Home() {
         }
         if (status !== 'All') {
           query = query.eq('transaction_status', status)
+        }
+        if (sourceBank === 'Banque Misr') {
+          query = query.eq('batch_purpose', 'Banque Misr')
+        } else if (sourceBank === 'CIB') {
+          query = query.neq('batch_purpose', 'Banque Misr')
         }
         if (startDate) {
           query = query.gte('batch_settlement_date', startDate)
@@ -1738,6 +1746,18 @@ export default function Home() {
                   className={styles.dateInput}
                   title="End Date"
                 />
+              </div>
+
+              <div>
+                <select 
+                  value={sourceBank} 
+                  onChange={(e) => { setSourceBank(e.target.value); setPage(1); }}
+                  className={styles.selectInput}
+                >
+                  <option value="All">All Banks</option>
+                  <option value="CIB">CIB</option>
+                  <option value="Banque Misr">Banque Misr</option>
+                </select>
               </div>
             </section>
           )}
