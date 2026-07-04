@@ -41,6 +41,184 @@ const FieldsetWrapper = ({ title, children, style }) => (
 const TransactionReceipt = forwardRef(({ transaction }, ref) => {
   if (!transaction) return null;
 
+  if (transaction.batch_purpose === 'Banque Misr') {
+    return (
+      <div ref={ref} style={{
+        padding: '40px 50px', width: '800px', minHeight: '1120px',
+        backgroundColor: '#ffffff', color: '#000000', fontFamily: 'Arial, sans-serif', fontSize: '12px', boxSizing: 'border-box'
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '35px' }}>
+          <div style={{ color: '#d32f2f', fontWeight: 'bold', fontSize: '18px', marginTop: '20px' }}>
+            Transaction Proof of payment
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <span style={{ fontSize: '36px', marginRight: '10px' }}>🦅</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', color: '#b99834' }}>
+                 <span style={{ fontFamily: 'Arial, sans-serif', fontSize: '24px', fontWeight: 'bold', letterSpacing: '2px', lineHeight: '1.1' }}>بـنـك مـصـر</span>
+                 <span style={{ fontFamily: 'Arial, sans-serif', fontSize: '16px', fontWeight: 'bold', letterSpacing: '1px' }}>BANQUE MISR</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Row 1: Transaction Ref No & ACCEPTED box */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+          <div style={{ width: '40%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Transaction Ref No</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{transaction.end_to_end_identifier || transaction.transaction_id || ''}</div>
+          </div>
+          <div style={{ width: '60%', display: 'flex', justifyContent: 'center' }}>
+            <div style={{ 
+              backgroundColor: '#fef3e3', 
+              color: '#a66a1a', 
+              padding: '10px 40px', 
+              fontWeight: 'bold', 
+              fontSize: '12px',
+              textAlign: 'center',
+              minWidth: '220px',
+              letterSpacing: '1px'
+            }}>
+              {transaction.transaction_status?.toUpperCase() || 'ACCEPTED'}
+            </div>
+          </div>
+        </div>
+
+        {/* Row 2: Transaction ID, Amount, Due Date */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+          <div style={{ width: '33%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Transaction ID</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{transaction.transaction_id || ''}</div>
+          </div>
+          <div style={{ width: '33%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Amount</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>EGP {formatAmt(transaction.transaction_amount)}</div>
+          </div>
+          <div style={{ width: '33%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Due date</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{transaction.batch_settlement_date || ''}</div>
+          </div>
+        </div>
+
+        {/* Row 3 & 4: Debit Date and Purpose */}
+        <div style={{ marginBottom: '15px' }}>
+          <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Debit date</div>
+          <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '15px' }}>{transaction.batch_settlement_date || ''}</div>
+          
+          <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Transaction Purpose</div>
+          <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{transaction.transaction_purpose || 'Transfer'}</div>
+        </div>
+
+        <hr style={{ border: '0', borderTop: '1px solid #ddd', margin: '20px 0' }} />
+
+        {/* Batch Details */}
+        <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '15px' }}>Batch Details</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+          <div style={{ width: '50%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Payment ID</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{transaction.batch_id || ''}</div>
+          </div>
+          <div style={{ width: '50%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Payment Type</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>Transfer to accounts</div>
+          </div>
+        </div>
+        <div style={{ marginBottom: '15px' }}>
+          <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Submission date</div>
+          <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{transaction.batch_settlement_date || ''}</div>
+        </div>
+
+        <hr style={{ border: '0', borderTop: '1px solid #ddd', margin: '20px 0' }} />
+
+        {/* Debitor Details */}
+        <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '15px' }}>Debitor Details</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+          <div style={{ width: '33%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Bank Name</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>Banque Misr</div>
+          </div>
+          <div style={{ width: '33%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Swift Code</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{transaction.debtor_party_bic || 'BMISEGCXXXX'}</div>
+          </div>
+          <div style={{ width: '33%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Branch Code</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>770</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+          <div style={{ width: '33%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Account Name</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px', fontFamily: 'Arial, sans-serif' }}>{transaction.debtor_name || 'جامعة النيل الاهلية'}</div>
+          </div>
+          <div style={{ width: '33%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Account Type</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>Account</div>
+          </div>
+          <div style={{ width: '33%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Account No</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{transaction.debtor_account_number || '7700001000003288'}</div>
+          </div>
+        </div>
+
+        <hr style={{ border: '0', borderTop: '1px solid #ddd', margin: '20px 0' }} />
+
+        {/* Creditor Details */}
+        <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '15px' }}>Creditor Details</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+          <div style={{ width: '33%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Bank Name</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{transaction.creditor_party_bic ? 'Internal/External Bank' : 'Bank'}</div>
+          </div>
+          <div style={{ width: '33%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Swift Code</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{transaction.creditor_party_bic || ''}</div>
+          </div>
+          <div style={{ width: '33%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Branch Code</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>0001</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+          <div style={{ width: '33%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Account Name</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{transaction.creditor_name || ''}</div>
+          </div>
+          <div style={{ width: '33%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Account Type</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>Account</div>
+          </div>
+          <div style={{ width: '33%' }}>
+            <div style={{ color: '#777', fontSize: '11px', marginBottom: '4px' }}>Account No</div>
+            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{transaction.creditor_account_number || ''}</div>
+          </div>
+        </div>
+
+        <hr style={{ border: '0', borderTop: '1px solid #ddd', margin: '20px 0' }} />
+
+        {/* Blue Footer Notice */}
+        <div style={{ 
+          backgroundColor: '#d7effb', 
+          padding: '15px 25px', 
+          borderRadius: '4px', 
+          color: '#444', 
+          fontStyle: 'italic', 
+          marginTop: '25px', 
+          fontSize: '13px',
+          lineHeight: '1.6'
+        }}>
+          Outside BM transactions that will be submitted/approved after 2:00 PM till 3:00 PM will be accepted and debited by BM and may be delivered to its corresponding bank on the next working day.
+        </div>
+
+        {/* Timestamp */}
+        <div style={{ textAlign: 'right', marginTop: '40px', fontWeight: 'bold', fontSize: '13px', color: '#000' }}>
+          {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div 
       ref={ref}
