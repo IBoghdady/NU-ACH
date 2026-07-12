@@ -344,7 +344,7 @@ export default function Home() {
     const ws = XLSX.utils.json_to_sheet([row])
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Misr")
-    XLSX.writeFile(wb, `${selectedBen.name} - ${amount} - ${getFormattedDate()}.csv`)
+    XLSX.writeFile(wb, `${selectedBen.name} - ${amount} - ${getFormattedDate()}.xlsx`)
     setShowSinglePayoutModal(false)
   }
 
@@ -394,7 +394,7 @@ export default function Home() {
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Misr")
-    XLSX.writeFile(wb, `Group_Payout_Misr_${dateStr}.csv`)
+    XLSX.writeFile(wb, `Group_Payout_Misr_${dateStr}.xlsx`)
     
     setShowGroupPayoutModal(false)
     setSelectedForPayout([])
