@@ -326,46 +326,48 @@ export default function Home() {
   }
 
   const handleSingleQuickPayoutACH = () => {
-    const { amount, comment } = payoutFormData[selectedBen.id] || {}
-    if (!amount) return toast.error('Please enter an amount.')
+    const payments = payoutFormData[selectedBen.id] || []
+    if (payments.some(p => !p.amount)) return toast.error('Please enter an amount for all payments.')
+    if (payments.length === 0) return toast.error('Please add at least one payment.')
     
-    const row = generateACHRow(selectedBen, amount, comment)
-    const ws = XLSX.utils.json_to_sheet([row])
+    const rows = payments.map(p => generateACHRow(selectedBen, p.amount, p.comment))
+    const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "ACH")
-    XLSX.writeFile(wb, `${selectedBen.name} - ${amount} - ${getFormattedDate()}.xlsx`)
+    XLSX.writeFile(wb, `${selectedBen.name} - Payout - ${getFormattedDate()}.xlsx`)
     setShowSinglePayoutModal(false)
   }
 
   const handleSingleQuickPayoutMisr = () => {
-    const { amount, comment } = payoutFormData[selectedBen.id] || {}
-    if (!amount) return toast.error('Please enter an amount.')
+    const payments = payoutFormData[selectedBen.id] || []
+    if (payments.some(p => !p.amount)) return toast.error('Please enter an amount for all payments.')
+    if (payments.length === 0) return toast.error('Please add at least one payment.')
     
-    const row = generateMisrRow(selectedBen, amount, comment)
-    const ws = XLSX.utils.json_to_sheet([row])
+    const rows = payments.map(p => generateMisrRow(selectedBen, p.amount, p.comment))
+    const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Misr")
-    XLSX.writeFile(wb, `${selectedBen.name} - ${amount} - ${getFormattedDate()}.xlsx`)
+    XLSX.writeFile(wb, `${selectedBen.name} - Payout - ${getFormattedDate()}.xlsx`)
     setShowSinglePayoutModal(false)
   }
 
   const handleGroupQuickPayoutACH = async () => {
     for (const ben of selectedForPayout) {
-      const { amount } = payoutFormData[ben.id] || {}
-      if (!amount) return toast.error(`Please enter an amount for ${ben.name}`)
+      const payments = payoutFormData[ben.id] || []
+      if (payments.some(p => !p.amount) || payments.length === 0) return toast.error(`Please enter all amounts for ${ben.name}`)
     }
 
     const zip = new JSZip()
     const dateStr = getFormattedDate()
     
     selectedForPayout.forEach((ben) => {
-      const { amount, comment } = payoutFormData[ben.id] || {}
-      const row = generateACHRow(ben, amount, comment)
-      const ws = XLSX.utils.json_to_sheet([row])
+      const payments = payoutFormData[ben.id] || []
+      const rows = payments.map(p => generateACHRow(ben, p.amount, p.comment))
+      const ws = XLSX.utils.json_to_sheet(rows)
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, "ACH")
       const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-      zip.file(`${ben.name} - ${amount} - ${dateStr}.xlsx`, excelBuffer)
+      zip.file(`${ben.name} - Payout - ${dateStr}.xlsx`, excelBuffer)
     })
 
     const zipBlob = await zip.generateAsync({ type: 'blob' })
@@ -382,14 +384,17 @@ export default function Home() {
 
   const handleGroupQuickPayoutMisr = async () => {
     for (const ben of selectedForPayout) {
-      const { amount } = payoutFormData[ben.id] || {}
-      if (!amount) return toast.error(`Please enter an amount for ${ben.name}`)
+      const payments = payoutFormData[ben.id] || []
+      if (payments.some(p => !p.amount) || payments.length === 0) return toast.error(`Please enter all amounts for ${ben.name}`)
     }
 
     const dateStr = getFormattedDate()
-    const rows = selectedForPayout.map((ben) => {
-      const { amount, comment } = payoutFormData[ben.id] || {}
-      return generateMisrRow(ben, amount, comment)
+    const rows = []
+    selectedForPayout.forEach((ben) => {
+      const payments = payoutFormData[ben.id] || []
+      payments.forEach(p => {
+        rows.push(generateMisrRow(ben, p.amount, p.comment))
+      })
     })
 
     const ws = XLSX.utils.json_to_sheet(rows)
@@ -2249,7 +2254,7 @@ export default function Home() {
                             onChange={(e) => {
                               if (e.target.checked) {
                                 setSelectedForPayout([...selectedForPayout, ben])
-                                setPayoutFormData({ ...payoutFormData, [ben.id]: { amount: '', comment: '' } })
+                                setPayoutFormData({ ...payoutFormData, [ben.id]: [{ amount: '', comment: '' }] })
                               } else {
                                 setSelectedForPayout(selectedForPayout.filter(b => b.id !== ben.id))
                               }
@@ -2541,7 +2546,7 @@ export default function Home() {
                 </button>
                 <button 
                   onClick={() => {
-                    setPayoutFormData({ [selectedBen.id]: { amount: '', comment: '' } })
+                    setPayoutFormData({ [selectedBen.id]: [{ amount: '', comment: '' }] })
                     setShowSinglePayoutModal(true)
                   }}
                   className={styles.submitBtn}
@@ -2792,31 +2797,65 @@ export default function Home() {
                 <div style={{ fontWeight: 'bold' }}>{selectedBen.name}</div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{selectedBen.account_number}</div>
               </div>
-              <div className={styles.formGroup}>
-                <label className={styles.label}>Amount (EGP)</label>
-                <input 
-                  type="number" 
-                  className={styles.inputField} 
-                  value={payoutFormData[selectedBen.id]?.amount || ''}
-                  onChange={(e) => setPayoutFormData({
-                    ...payoutFormData,
-                    [selectedBen.id]: { ...payoutFormData[selectedBen.id], amount: e.target.value }
-                  })}
-                  placeholder="0.00"
-                />
-              </div>
-              <div className={styles.formGroup}>
-                <label className={styles.label}>Comment / Reference</label>
-                <input 
-                  type="text" 
-                  className={styles.inputField} 
-                  value={payoutFormData[selectedBen.id]?.comment || ''}
-                  onChange={(e) => setPayoutFormData({
-                    ...payoutFormData,
-                    [selectedBen.id]: { ...payoutFormData[selectedBen.id], comment: e.target.value }
-                  })}
-                  placeholder="e.g. June Services"
-                />
+              <div style={{ maxHeight: '50vh', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                {(payoutFormData[selectedBen.id] || []).map((payment, idx) => (
+                  <div key={idx} style={{ marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)', position: 'relative' }}>
+                    {(payoutFormData[selectedBen.id]?.length > 1) && (
+                      <button 
+                        onClick={() => {
+                          const current = payoutFormData[selectedBen.id]
+                          setPayoutFormData({
+                            ...payoutFormData,
+                            [selectedBen.id]: current.filter((_, i) => i !== idx)
+                          })
+                        }}
+                        style={{ position: 'absolute', right: 0, top: 0, background: 'none', border: 'none', color: 'var(--error-color)', cursor: 'pointer', fontWeight: 'bold' }}
+                        title="Remove Payment"
+                      >✕</button>
+                    )}
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Amount (EGP)</label>
+                      <input 
+                        type="number" 
+                        className={styles.inputField} 
+                        value={payment.amount}
+                        onChange={(e) => {
+                          const current = [...(payoutFormData[selectedBen.id] || [])]
+                          current[idx] = { ...current[idx], amount: e.target.value }
+                          setPayoutFormData({ ...payoutFormData, [selectedBen.id]: current })
+                        }}
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Comment / Reference</label>
+                      <input 
+                        type="text" 
+                        className={styles.inputField} 
+                        value={payment.comment}
+                        onChange={(e) => {
+                          const current = [...(payoutFormData[selectedBen.id] || [])]
+                          current[idx] = { ...current[idx], comment: e.target.value }
+                          setPayoutFormData({ ...payoutFormData, [selectedBen.id]: current })
+                        }}
+                        placeholder="e.g. June Services"
+                      />
+                    </div>
+                  </div>
+                ))}
+                
+                <button 
+                  onClick={() => {
+                    const current = payoutFormData[selectedBen.id] || []
+                    setPayoutFormData({
+                      ...payoutFormData,
+                      [selectedBen.id]: [...current, { amount: '', comment: '' }]
+                    })
+                  }}
+                  style={{ background: 'none', border: '1px dashed var(--border-color)', padding: '0.75rem', width: '100%', borderRadius: '8px', color: 'var(--text-secondary)', cursor: 'pointer', marginTop: '0.5rem' }}
+                >
+                  + Add another payment
+                </button>
               </div>
               <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
                 <button className={styles.submitBtn} style={{ background: 'var(--surface-color)' }} onClick={() => setShowSinglePayoutModal(false)}>Cancel</button>
@@ -2835,39 +2874,72 @@ export default function Home() {
               
               <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: '1rem' }}>
                 {selectedForPayout.map(ben => (
-                  <div key={ben.id} style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
-                    <div style={{ flex: 2 }}>
+                  <div key={ben.id} style={{ marginBottom: '2rem', paddingBottom: '1rem', borderBottom: '2px solid var(--border-color)' }}>
+                    <div style={{ marginBottom: '1rem' }}>
                       <div style={{ fontWeight: 'bold' }}>{ben.name}</div>
                       <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{ben.account_number}</div>
                     </div>
-                    <div className={styles.formGroup} style={{ flex: 1, marginBottom: 0 }}>
-                      <label className={styles.label} style={{ fontSize: '0.75rem' }}>Amount</label>
-                      <input 
-                        type="number" 
-                        className={styles.inputField} 
-                        value={payoutFormData[ben.id]?.amount || ''}
-                        onChange={(e) => setPayoutFormData({
+                    
+                    {(payoutFormData[ben.id] || []).map((payment, idx) => (
+                      <div key={idx} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', marginBottom: '0.75rem', position: 'relative' }}>
+                        <div className={styles.formGroup} style={{ flex: 1, marginBottom: 0 }}>
+                          <label className={styles.label} style={{ fontSize: '0.75rem' }}>Amount</label>
+                          <input 
+                            type="number" 
+                            className={styles.inputField} 
+                            value={payment.amount}
+                            onChange={(e) => {
+                              const current = [...(payoutFormData[ben.id] || [])]
+                              current[idx] = { ...current[idx], amount: e.target.value }
+                              setPayoutFormData({ ...payoutFormData, [ben.id]: current })
+                            }}
+                            placeholder="0.00"
+                            style={{ padding: '8px' }}
+                          />
+                        </div>
+                        <div className={styles.formGroup} style={{ flex: 1.5, marginBottom: 0 }}>
+                          <label className={styles.label} style={{ fontSize: '0.75rem' }}>Comment</label>
+                          <input 
+                            type="text" 
+                            className={styles.inputField} 
+                            value={payment.comment}
+                            onChange={(e) => {
+                              const current = [...(payoutFormData[ben.id] || [])]
+                              current[idx] = { ...current[idx], comment: e.target.value }
+                              setPayoutFormData({ ...payoutFormData, [ben.id]: current })
+                            }}
+                            placeholder="e.g. Monthly Fee"
+                            style={{ padding: '8px' }}
+                          />
+                        </div>
+                        {(payoutFormData[ben.id]?.length > 1) && (
+                          <button 
+                            onClick={() => {
+                              const current = payoutFormData[ben.id]
+                              setPayoutFormData({
+                                ...payoutFormData,
+                                [ben.id]: current.filter((_, i) => i !== idx)
+                              })
+                            }}
+                            style={{ background: 'none', border: 'none', color: 'var(--error-color)', cursor: 'pointer', fontWeight: 'bold', marginTop: '1.5rem' }}
+                            title="Remove Payment"
+                          >✕</button>
+                        )}
+                      </div>
+                    ))}
+                    
+                    <button 
+                      onClick={() => {
+                        const current = payoutFormData[ben.id] || []
+                        setPayoutFormData({
                           ...payoutFormData,
-                          [ben.id]: { ...payoutFormData[ben.id], amount: e.target.value }
-                        })}
-                        placeholder="0.00"
-                        style={{ padding: '8px' }}
-                      />
-                    </div>
-                    <div className={styles.formGroup} style={{ flex: 1.5, marginBottom: 0 }}>
-                      <label className={styles.label} style={{ fontSize: '0.75rem' }}>Comment</label>
-                      <input 
-                        type="text" 
-                        className={styles.inputField} 
-                        value={payoutFormData[ben.id]?.comment || ''}
-                        onChange={(e) => setPayoutFormData({
-                          ...payoutFormData,
-                          [ben.id]: { ...payoutFormData[ben.id], comment: e.target.value }
-                        })}
-                        placeholder="e.g. Monthly Fee"
-                        style={{ padding: '8px' }}
-                      />
-                    </div>
+                          [ben.id]: [...current, { amount: '', comment: '' }]
+                        })
+                      }}
+                      style={{ background: 'none', border: '1px dashed var(--border-color)', padding: '0.5rem', width: '100%', borderRadius: '8px', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.85rem' }}
+                    >
+                      + Add another payment for {ben.name}
+                    </button>
                   </div>
                 ))}
               </div>
