@@ -76,23 +76,30 @@ export default async function handler(req, res) {
 
   // POST: Create a new beneficiary
   if (req.method === 'POST') {
-    const { name, account_number, bank_bic, category = 'Operational', employee_code } = req.body
+    const { name, account_number, bank_bic, category = 'Operational', employee_code, force } = req.body
 
     if (!name || !account_number) {
       return res.status(400).json({ error: 'Name and Account Number are required.' })
     }
 
     try {
-      const { data, error } = await supabase
-        .from('beneficiaries')
-        .insert([{
-          name: name.trim(),
-          account_number: account_number.trim(),
-          bank_bic: bank_bic ? bank_bic.trim() : null,
-          category,
-          employee_code: employee_code ? employee_code.trim() : null
-        }])
-        .select()
+      const payload = {
+        name: name.trim(),
+        account_number: account_number.trim(),
+        bank_bic: bank_bic ? bank_bic.trim() : null,
+        category,
+        employee_code: employee_code ? employee_code.trim() : null
+      }
+
+      let query = supabase.from('beneficiaries')
+      
+      if (force) {
+        query = query.upsert(payload, { onConflict: 'account_number' }).select()
+      } else {
+        query = query.insert([payload]).select()
+      }
+
+      const { data, error } = await query
 
       if (error) {
         if (error.code === '23505') {

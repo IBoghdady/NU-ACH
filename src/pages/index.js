@@ -1198,8 +1198,8 @@ export default function Home() {
   }, [benSearch, benEmployeeCodeSearch, activeView])
 
   // Handle adding new Beneficiary
-  const handleAddBeneficiary = async (e) => {
-    e.preventDefault()
+  const handleAddBeneficiary = async (e, forceUpdate = false) => {
+    if (e) e.preventDefault()
     setBenFormError('')
     setBenFormSuccess('')
 
@@ -1217,11 +1217,21 @@ export default function Home() {
           account_number: newBenAcc,
           bank_bic: newBenBic,
           category: newBenCategory,
-          employee_code: newBenCategory === 'Staff' ? newBenEmpCode : null
+          employee_code: newBenCategory === 'Staff' ? newBenEmpCode : null,
+          force: forceUpdate
         })
       })
 
       const data = await res.json()
+
+      if (res.status === 409 && !forceUpdate) {
+        if (window.confirm('A beneficiary with this account number already exists. Do you want to update it with these new details?')) {
+          return handleAddBeneficiary(null, true)
+        } else {
+          return
+        }
+      }
+
       if (!res.ok) {
         throw new Error(data.error || 'Failed to register beneficiary.')
       }
