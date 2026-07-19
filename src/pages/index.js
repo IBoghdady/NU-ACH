@@ -7,6 +7,7 @@ import TransactionReceipt from '../components/TransactionReceipt'
 import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import toast from 'react-hot-toast'
+import banksData from '../lib/banks.json'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts'
 const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e']
 
@@ -688,7 +689,8 @@ export default function Home() {
   const [newBenAcc, setNewBenAcc] = useState('')
   const [newBenBic, setNewBenBic] = useState('')
   const [newBenEmpCode, setNewBenEmpCode] = useState('')
-  const [newBenCategory, setNewBenCategory] = useState('Operational')
+  const [newBenBankName, setNewBenBankName] = useState('')
+  const [newBenCategory, setNewBenCategory] = useState('Operational Expenses')
   const [benFormSuccess, setBenFormSuccess] = useState('')
   const [benFormError, setBenFormError] = useState('')
 
@@ -1224,7 +1226,8 @@ export default function Home() {
       setNewBenAcc('')
       setNewBenBic('')
       setNewBenEmpCode('')
-      setNewBenCategory('Operational')
+      setNewBenBankName('')
+      setNewBenCategory('Operational Expenses')
       setShowAddBen(false)
       fetchBeneficiaries()
     } catch (err) {
@@ -2117,6 +2120,29 @@ export default function Home() {
                         placeholder="e.g. 001307050369..."
                         required
                       />
+                    </div>
+
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Bank Name (Search SWIFT)</label>
+                      <input 
+                        type="text" 
+                        value={newBenBankName} 
+                        onChange={(e) => {
+                          setNewBenBankName(e.target.value);
+                          const found = banksData.find(b => b.bankName === e.target.value);
+                          if (found) {
+                            setNewBenBic(found.swiftCode);
+                          }
+                        }} 
+                        className={styles.inputField}
+                        placeholder="Type bank name to find SWIFT..."
+                        list="bank-names"
+                      />
+                      <datalist id="bank-names">
+                        {banksData.map((bank, i) => (
+                          <option key={i} value={bank.bankName} />
+                        ))}
+                      </datalist>
                     </div>
 
                     <div className={styles.formGroup}>
