@@ -1217,7 +1217,7 @@ export default function Home() {
           account_number: newBenAcc,
           bank_bic: newBenBic,
           category: newBenCategory,
-          employee_code: newBenCategory === 'Staff' ? newBenEmpCode : null,
+          employee_code: ['Staff', 'Students'].includes(newBenCategory) ? newBenEmpCode : null,
           force: forceUpdate
         })
       })
@@ -2183,18 +2183,19 @@ export default function Home() {
                         <option value="Utilities">Utilities & Energy</option>
                         <option value="Insurance">Medical & Corporate Insurance</option>
                         <option value="Staff">Staff & Salaries</option>
+                        <option value="Students">Students</option>
                       </select>
                     </div>
 
-                    {newBenCategory === 'Staff' && (
+                    {['Staff', 'Students'].includes(newBenCategory) && (
                       <div className={styles.formGroup}>
-                        <label className={styles.label}>Employee ID (Required for Payroll)</label>
+                        <label className={styles.label}>{newBenCategory === 'Students' ? 'Student ID' : 'Employee ID'} (Required for Tracking)</label>
                         <input 
                           type="text" 
                           value={newBenEmpCode} 
                           onChange={(e) => setNewBenEmpCode(e.target.value)} 
                           className={styles.inputField}
-                          placeholder="e.g. EMP-00123"
+                          placeholder={newBenCategory === 'Students' ? "e.g. STU-00123" : "e.g. EMP-00123"}
                           required
                         />
                       </div>
@@ -3110,13 +3111,13 @@ export default function Home() {
                 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
                   <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                    <label className={styles.label}>Employee Code (Optional)</label>
+                    <label className={styles.label}>{newBenCategory === 'Students' ? 'Student ID' : 'Employee Code'} (Optional)</label>
                     <input 
                       type="text" 
                       value={newBenEmpCode} 
                       onChange={(e) => setNewBenEmpCode(e.target.value)} 
                       className={styles.inputField}
-                      placeholder="e.g. EMP-123"
+                      placeholder={newBenCategory === 'Students' ? "e.g. STU-123" : "e.g. EMP-123"}
                     />
                   </div>
                   <div className={styles.formGroup} style={{ marginBottom: 0 }}>
@@ -3143,6 +3144,7 @@ export default function Home() {
                     <option value="Utilities">Utilities & Energy</option>
                     <option value="Insurance">Medical & Corporate Insurance</option>
                     <option value="Staff">Staff & Salaries</option>
+                    <option value="Students">Students</option>
                   </select>
                 </div>
 
