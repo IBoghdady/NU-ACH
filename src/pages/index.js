@@ -848,6 +848,13 @@ export default function Home() {
   }
 
   const executeBulkInsert = async (newBens, resolvedConflicts, txStats = null) => {
+    // Validation: Check if any conflict doesn't have an action assigned
+    const unresolved = resolvedConflicts.filter(c => !c.action)
+    if (unresolved.length > 0) {
+      toast.error(`Please select Skip or Update for all ${unresolved.length} remaining duplicate(s) (or use Skip All / Update All).`)
+      return
+    }
+
     setIsBulkProcessing(true)
     try {
       const updatesMap = new Map()
@@ -2985,10 +2992,12 @@ export default function Home() {
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
                   <button 
+                    type="button"
                     onClick={() => setBulkConflicts(bulkConflicts.map(c => ({ ...c, action: 'skip' })))}
                     style={{ background: 'var(--surface-color)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}
                   >Skip All</button>
                   <button 
+                    type="button"
                     onClick={() => setBulkConflicts(bulkConflicts.map(c => ({ ...c, action: 'update' })))}
                     style={{ background: 'var(--surface-color)', border: '1px solid var(--border-color)', color: 'var(--accent-color)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
                   >Update All</button>
@@ -3045,6 +3054,7 @@ export default function Home() {
               <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', justifyContent: 'flex-end' }}>
                 <button type="button" className={styles.submitBtn} style={{ background: 'var(--surface-color)', flex: 0, padding: '10px 20px', boxShadow: 'none' }} onClick={() => setShowBulkConflictModal(false)}>Cancel</button>
                 <button 
+                  type="button"
                   className={styles.submitBtn} 
                   style={{ flex: 0, padding: '10px 20px', whiteSpace: 'nowrap' }} 
                   onClick={() => executeBulkInsert(bulkNewBens, bulkConflicts, pendingTxStats)}
