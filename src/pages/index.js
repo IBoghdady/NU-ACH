@@ -2973,8 +2973,20 @@ export default function Home() {
                 <button onClick={() => setShowBulkConflictModal(false)} className={styles.closeBtn}>×</button>
               </div>
               
-              <div style={{ marginBottom: '1.5rem', color: 'var(--text-secondary)' }}>
-                We found <strong>{bulkConflicts.length}</strong> account(s) that already exist in the directory. Please select whether to update their data or skip them.
+              <div style={{ marginBottom: '1.5rem', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                <div>
+                  We found <strong>{bulkConflicts.length}</strong> account(s) that already exist in the directory. Please select whether to update their data or skip them.
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                  <button 
+                    onClick={() => setBulkConflicts(bulkConflicts.map(c => ({ ...c, action: 'skip' })))}
+                    style={{ background: 'var(--surface-color)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}
+                  >Skip All</button>
+                  <button 
+                    onClick={() => setBulkConflicts(bulkConflicts.map(c => ({ ...c, action: 'update' })))}
+                    style={{ background: 'var(--surface-color)', border: '1px solid var(--border-color)', color: 'var(--accent-color)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
+                  >Update All</button>
+                </div>
               </div>
 
               <div style={{ maxHeight: '50vh', overflowY: 'auto', paddingRight: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
