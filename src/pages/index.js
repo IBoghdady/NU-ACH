@@ -850,10 +850,16 @@ export default function Home() {
   const executeBulkInsert = async (newBens, resolvedConflicts, txStats = null) => {
     setIsBulkProcessing(true)
     try {
-      const updates = resolvedConflicts.filter(c => c.action === 'update').map(c => ({
-        id: c.existingRow.id,
-        ...c.newRow
-      }))
+      const updatesMap = new Map()
+      resolvedConflicts.forEach(c => {
+        if (c.action === 'update') {
+          updatesMap.set(c.existingRow.id, {
+            id: c.existingRow.id,
+            ...c.newRow
+          })
+        }
+      })
+      const updates = Array.from(updatesMap.values())
 
       // Insert new
       if (newBens.length > 0) {
@@ -2970,7 +2976,7 @@ export default function Home() {
             <div className={styles.formCard} style={{ width: '800px', maxWidth: '100%', margin: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: '800' }}>⚠️ Resolve Duplicate Accounts</h2>
-                <button onClick={() => setShowBulkConflictModal(false)} className={styles.closeBtn}>×</button>
+                <button type="button" onClick={() => setShowBulkConflictModal(false)} className={styles.closeBtn}>×</button>
               </div>
               
               <div style={{ marginBottom: '1.5rem', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
@@ -3037,7 +3043,7 @@ export default function Home() {
               </div>
 
               <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', justifyContent: 'flex-end' }}>
-                <button className={styles.submitBtn} style={{ background: 'var(--surface-color)', flex: 0, padding: '10px 20px', boxShadow: 'none' }} onClick={() => setShowBulkConflictModal(false)}>Cancel</button>
+                <button type="button" className={styles.submitBtn} style={{ background: 'var(--surface-color)', flex: 0, padding: '10px 20px', boxShadow: 'none' }} onClick={() => setShowBulkConflictModal(false)}>Cancel</button>
                 <button 
                   className={styles.submitBtn} 
                   style={{ flex: 0, padding: '10px 20px', whiteSpace: 'nowrap' }} 
