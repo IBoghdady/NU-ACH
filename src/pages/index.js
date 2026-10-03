@@ -680,6 +680,8 @@ export default function Home() {
   const [isBenLoading, setIsBenLoading] = useState(false)
   const [showAddBen, setShowAddBen] = useState(false)
   const [selectedBen, setSelectedBen] = useState(null)
+  const [isEditingBen, setIsEditingBen] = useState(false)
+  const [editBenData, setEditBenData] = useState(null)
   const [benHistory, setBenHistory] = useState([])
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
   
@@ -1260,6 +1262,30 @@ export default function Home() {
       fetchBeneficiaries()
     } catch (err) {
       setBenFormError(err.message)
+    }
+  }
+
+  // Save Beneficiary Edit
+  const handleSaveBenEdit = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('beneficiaries')
+        .update({
+          name: editBenData.name,
+          category: editBenData.category,
+          employee_code: ['Staff', 'Students'].includes(editBenData.category) ? editBenData.employee_code : null
+        })
+        .eq('id', editBenData.id)
+        .select()
+      
+      if (error) throw error
+      
+      toast.success('Beneficiary updated successfully!')
+      setSelectedBen(data[0])
+      setIsEditingBen(false)
+      fetchBeneficiaries()
+    } catch (err) {
+      toast.error('Failed to update: ' + err.message)
     }
   }
 
@@ -2502,17 +2528,77 @@ export default function Home() {
 
       {/* 4. DETAIL HISTORY SLIDE-OUT DRAWER PANEL */}
       {selectedBen && (
-        <div className={styles.drawerOverlay} onClick={() => setSelectedBen(null)}>
+        <div className={styles.drawerOverlay} onClick={() => { setSelectedBen(null); setIsEditingBen(false); }}>
           <div className={styles.drawer} onClick={(e) => e.stopPropagation()}>
             
-            <div className={styles.drawerHeader}>
-              <div>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-primary)', lineHeight: '1.4' }}>
-                  {selectedBen.name}
-                </h2>
-                <span className={styles.benCategory}>{selectedBen.category || 'Operational'}</span>
-              </div>
-              <button className={styles.drawerClose} onClick={() => setSelectedBen(null)}>✕</button>
+            <div className={styles.drawerHeader} style={{ position: 'relative' }}>
+              {!isEditingBen ? (
+                <div style={{ flex: 1, paddingRight: '2rem' }}>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-primary)', lineHeight: '1.4', wordBreak: 'break-word' }}>
+                    {selectedBen.name}
+                  </h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <span className={styles.benCategory}>{selectedBen.category || 'Operational Expenses'}</span>
+                    <button 
+                      onClick={() => {
+                        setEditBenData(selectedBen)
+                        setIsEditingBen(true)
+                      }}
+                      className={styles.copyBtn}
+                    >
+                      ✏️ Edit
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ flex: 1, paddingRight: '2rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div>
+                    <label className={styles.label} style={{ fontSize: '0.75rem' }}>Full Name</label>
+                    <input 
+                      type="text" 
+                      className={styles.inputField} 
+                      value={editBenData?.name || ''}
+                      onChange={e => setEditBenData({...editBenData, name: e.target.value})}
+                      style={{ padding: '8px', fontSize: '1rem', fontWeight: 'bold' }}
+                    />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                    <div>
+                      <label className={styles.label} style={{ fontSize: '0.75rem' }}>Category</label>
+                      <select 
+                        className={styles.inputField}
+                        value={editBenData?.category || 'Operational Expenses'}
+                        onChange={e => setEditBenData({...editBenData, category: e.target.value})}
+                        style={{ padding: '8px' }}
+                      >
+                        <option value="Operational Expenses">Operational Expenses</option>
+                        <option value="Infrastructure & Construction">Infrastructure & Construction</option>
+                        <option value="Utilities & Energy">Utilities & Energy</option>
+                        <option value="Medical & Corporate Insurance">Medical & Corporate Insurance</option>
+                        <option value="Staff">Staff & Salaries</option>
+                        <option value="Students">Students</option>
+                      </select>
+                    </div>
+                    {['Staff', 'Students'].includes(editBenData?.category) && (
+                      <div>
+                        <label className={styles.label} style={{ fontSize: '0.75rem' }}>{editBenData?.category === 'Students' ? 'Student ID' : 'Employee ID'}</label>
+                        <input 
+                          type="text" 
+                          className={styles.inputField} 
+                          value={editBenData?.employee_code || ''}
+                          onChange={e => setEditBenData({...editBenData, employee_code: e.target.value})}
+                          style={{ padding: '8px' }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                    <button className={styles.submitBtn} style={{ padding: '6px 12px', fontSize: '0.85rem' }} onClick={handleSaveBenEdit}>Save</button>
+                    <button className={styles.submitBtn} style={{ padding: '6px 12px', fontSize: '0.85rem', background: 'var(--surface-color)', boxShadow: 'none' }} onClick={() => setIsEditingBen(false)}>Cancel</button>
+                  </div>
+                </div>
+              )}
+              <button className={styles.drawerClose} style={{ position: 'absolute', top: '1.25rem', right: '1.25rem' }} onClick={() => { setSelectedBen(null); setIsEditingBen(false); }}>✕</button>
             </div>
 
             <div className={styles.drawerMeta}>
