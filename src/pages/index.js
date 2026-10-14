@@ -130,13 +130,22 @@ export default function Home() {
     return 'NU'
   }
 
-  // Helper to format file name: [Beneficiary Name] + [Total Amount] + [User Initials]
+  const getFormattedDate = () => {
+    const d = new Date()
+    const day = String(d.getDate()).padStart(2, '0')
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const year = d.getFullYear()
+    return `${day}-${month}-${year}`
+  }
+
+  // Helper to format file name: [Beneficiary Name] + [Total Amount] + [User Initials] + [Today's Date]
   const generateExportFileName = (benName, totalAmount, ext = 'xlsx') => {
     const cleanName = (benName || 'Beneficiary').replace(/[\\/:*?"<>|]/g, '').trim()
     const num = parseFloat(totalAmount) || 0
     const cleanAmount = (num % 1 === 0) ? num.toFixed(0) : num.toFixed(2)
     const initials = getUserInitials()
-    return `${cleanName} - ${cleanAmount} - ${initials}.${ext}`
+    const dateStr = getFormattedDate()
+    return `${cleanName} - ${cleanAmount} - ${initials} - ${dateStr}.${ext}`
   }
 
   useEffect(() => {
@@ -405,14 +414,6 @@ export default function Home() {
       Email: '',
       Mobile: ''
     }
-  }
-
-  const getFormattedDate = () => {
-    const d = new Date()
-    const day = String(d.getDate()).padStart(2, '0')
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const year = d.getFullYear()
-    return `${day}-${month}-${year}`
   }
 
   const handleSingleQuickPayoutACH = () => {
