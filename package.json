@@ -16,6 +16,7 @@
     "xlsx": "^0.18.5",
     "jszip": "^3.10.1",
     "react-hot-toast": "^2.4.1",
-    "recharts": "^2.12.7"
+    "recharts": "^2.12.7",
+    "nodemailer": "^6.9.13"
   }
 }

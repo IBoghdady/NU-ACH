@@ -85,10 +85,44 @@ export default function Home() {
     document.documentElement.setAttribute('data-theme', newTheme)
   }
 
+  // Centralized Audit & Activity Logger
+  const logAudit = ({ action, category, details, metadata = {}, userEmail = null }) => {
+    try {
+      const email = userEmail || session?.user?.email || authEmail || 'Unknown User'
+      fetch('/api/audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userEmail: email,
+          action,
+          category,
+          details,
+          metadata
+        })
+      }).catch(err => console.warn('Audit notification warning:', err))
+    } catch (e) {
+      console.warn('Audit error:', e)
+    }
+  }
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setIsInitialCheck(false)
+      if (session?.user?.email) {
+        try {
+          const key = 'nu_audit_active_session_' + session.user.email
+          if (!sessionStorage.getItem(key)) {
+            sessionStorage.setItem(key, 'true')
+            logAudit({
+              userEmail: session.user.email,
+              action: 'User Session Resumed / Portal Accessed',
+              category: 'Authentication',
+              details: `User ${session.user.email} accessed the portal with an active session.`
+            })
+          }
+        } catch (e) {}
+      }
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -109,7 +143,19 @@ export default function Home() {
       email: authEmail,
       password: authPassword,
     })
-    if (error) setAuthError(error.message)
+    if (error) {
+      setAuthError(error.message)
+    } else {
+      logAudit({
+        userEmail: authEmail,
+        action: 'User Logged In',
+        category: 'Authentication',
+        details: `User ${authEmail} successfully signed in to the NU-ACH portal.`
+      })
+      try {
+        sessionStorage.setItem('nu_audit_active_session_' + authEmail, 'true')
+      } catch (e) {}
+    }
     setIsAuthLoading(false)
   }
 
@@ -275,7 +321,13 @@ export default function Home() {
     const ws = XLSX.utils.json_to_sheet(exportData)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "ACH Payouts")
-    XLSX.writeFile(wb, `ACH_Payout_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    const fileName = `ACH_Payout_${new Date().toISOString().slice(0, 10)}.xlsx`
+    XLSX.writeFile(wb, fileName)
+    logAudit({
+      action: 'Exported Excel: Batch ACH Payouts',
+      category: 'Excel Export',
+      details: `Generated batch ACH payout file "${fileName}" containing ${exportData.length} records.`
+    })
   }
 
   const downloadPayoutTemplate = () => {
@@ -334,7 +386,13 @@ export default function Home() {
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "ACH")
-    XLSX.writeFile(wb, `${selectedBen.name} - Payout - ${getFormattedDate()}.xlsx`)
+    const fileName = `${selectedBen.name} - Payout - ${getFormattedDate()}.xlsx`
+    XLSX.writeFile(wb, fileName)
+    logAudit({
+      action: 'Exported Excel: Single ACH Payout',
+      category: 'Excel Export',
+      details: `Generated ACH payout Excel sheet for "${selectedBen.name}" (${selectedBen.account_number}). Total payments: ${payments.length}, Total Amount: EGP ${payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0).toLocaleString()}. File: "${fileName}".`
+    })
     setShowSinglePayoutModal(false)
   }
 
@@ -347,7 +405,13 @@ export default function Home() {
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Misr")
-    XLSX.writeFile(wb, `${selectedBen.name} - Payout - ${getFormattedDate()}.xlsx`)
+    const fileName = `${selectedBen.name} - Payout - ${getFormattedDate()}.xlsx`
+    XLSX.writeFile(wb, fileName)
+    logAudit({
+      action: 'Exported Excel: Single Banque Misr Payout',
+      category: 'Excel Export',
+      details: `Generated Banque Misr payout Excel sheet for "${selectedBen.name}" (${selectedBen.account_number}). Total payments: ${payments.length}, Total Amount: EGP ${payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0).toLocaleString()}. File: "${fileName}".`
+    })
     setShowSinglePayoutModal(false)
   }
 
@@ -378,6 +442,12 @@ export default function Home() {
     a.click()
     URL.revokeObjectURL(url)
     
+    logAudit({
+      action: 'Exported Excel: Group ACH Payouts (ZIP Archive)',
+      category: 'Excel Export',
+      details: `Generated ZIP archive "Group_Payout_${dateStr}.zip" containing ACH Excel sheets for ${selectedForPayout.length} beneficiaries.`
+    })
+
     setShowGroupPayoutModal(false)
     setSelectedForPayout([])
   }
@@ -400,8 +470,15 @@ export default function Home() {
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Misr")
-    XLSX.writeFile(wb, `Group_Payout_Misr_${dateStr}.xlsx`)
+    const fileName = `Group_Payout_Misr_${dateStr}.xlsx`
+    XLSX.writeFile(wb, fileName)
     
+    logAudit({
+      action: 'Exported Excel: Group Banque Misr Payout',
+      category: 'Excel Export',
+      details: `Generated consolidated Banque Misr group payout Excel sheet "${fileName}" for ${selectedForPayout.length} beneficiaries (${rows.length} total payments).`
+    })
+
     setShowGroupPayoutModal(false)
     setSelectedForPayout([])
   }
@@ -759,7 +836,13 @@ export default function Home() {
       const ws = XLSX.utils.json_to_sheet(formattedData)
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, "Beneficiaries")
-      XLSX.writeFile(wb, `NU_Beneficiaries_${new Date().toISOString().slice(0, 10)}.xlsx`)
+      const fileName = `NU_Beneficiaries_${new Date().toISOString().slice(0, 10)}.xlsx`
+      XLSX.writeFile(wb, fileName)
+      logAudit({
+        action: 'Exported Excel: Beneficiaries Directory',
+        category: 'Excel Export',
+        details: `Exported full beneficiaries directory (${formattedData.length} records) to Excel file "${fileName}".`
+      })
     } catch (err) {
       console.error(err)
       toast.error('Failed to export beneficiaries.')
@@ -892,6 +975,13 @@ export default function Home() {
       } else {
         toast.success(`Successfully registered ${newBens.length} new and updated ${updates.length} existing beneficiaries.`)
       }
+
+      logAudit({
+        action: 'Bulk Beneficiaries Registered / Updated',
+        category: 'Beneficiaries',
+        details: `Processed directory batch: Registered ${newBens.length} new beneficiaries, Overwrote/Updated ${updates.length} existing beneficiaries.`
+      })
+
       setShowBulkConflictModal(false)
       setBulkNewBens([])
       setPendingTxStats(null)
@@ -1037,6 +1127,12 @@ export default function Home() {
 
       const txStats = { inserted: result.inserted, skipped: result.skipped }
       
+      logAudit({
+        action: 'Transactions Imported',
+        category: 'Transactions',
+        details: `Imported bank transaction batch: ${result.inserted} transactions inserted, ${result.skipped} existing duplicates skipped. Total processed in file: ${cleanedRows.length}.`
+      })
+
       // Immediate feedback for transactions before processing beneficiaries
       toast.success(`Successfully processed ${result.inserted + result.skipped} rows. Checking beneficiaries...`)
       
@@ -1154,6 +1250,12 @@ export default function Home() {
       
       toast.success(`Registered ${newBenName}!`)
       
+      logAudit({
+        action: 'Quick Registered Beneficiary',
+        category: 'Beneficiaries',
+        details: `Quick registered beneficiary "${newBenName}" (Account: ${newBenAcc}, Category: ${newBenCategory}${['Staff', 'Students'].includes(newBenCategory) ? `, ID: ${newBenEmpCode}` : ''}).`
+      })
+      
       const updatedPreview = payoutPreview.map(r => {
         if (r.id === quickAddRow.id) {
            r._status = 'Matched'
@@ -1252,6 +1354,11 @@ export default function Home() {
       }
 
       toast.success(`Beneficiary "${newBenName}" registered successfully!`)
+      logAudit({
+        action: forceUpdate ? 'Beneficiary / Vendor Overwritten' : 'New Beneficiary / Vendor Added',
+        category: 'Beneficiaries',
+        details: `${forceUpdate ? 'Overwrote existing' : 'Created new'} beneficiary "${newBenName}" (Account: ${newBenAcc}, Bank BIC: ${newBenBic || 'N/A'}, Category: ${newBenCategory}${['Staff', 'Students'].includes(newBenCategory) ? `, ID: ${newBenEmpCode}` : ''}).`
+      })
       setNewBenName('')
       setNewBenAcc('')
       setNewBenBic('')
@@ -1281,6 +1388,11 @@ export default function Home() {
       if (error) throw error
       
       toast.success('Beneficiary updated successfully!')
+      logAudit({
+        action: 'Beneficiary / Vendor Profile Modified',
+        category: 'Beneficiaries',
+        details: `Updated beneficiary profile "${selectedBen.name}" (Account: ${selectedBen.account_number}). Changes -> Name: "${selectedBen.name}" → "${editBenData.name}", Category: "${selectedBen.category || 'Operational Expenses'}" → "${editBenData.category}", ID: "${selectedBen.employee_code || 'None'}" → "${editBenData.employee_code || 'None'}".`
+      })
       setSelectedBen(data[0])
       setIsEditingBen(false)
       fetchBeneficiaries()
@@ -1411,6 +1523,11 @@ export default function Home() {
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
 
+      logAudit({
+        action: 'Exported Excel: Beneficiary Ledger',
+        category: 'Excel Export',
+        details: `Exported payment audit history ledger for beneficiary "${ben.name}" (Account: ${ben.account_number}) containing ${allRows.length} transaction records.`
+      })
     } catch (err) {
       console.error(err)
       toast.error('Failed to export ledger. Please try again.')
