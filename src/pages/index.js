@@ -105,6 +105,40 @@ export default function Home() {
     }
   }
 
+  // Get user initials (first two letters) from session email or metadata
+  const getUserInitials = () => {
+    const fullName = session?.user?.user_metadata?.full_name || session?.user?.user_metadata?.name
+    if (fullName && typeof fullName === 'string' && fullName.trim()) {
+      const parts = fullName.trim().split(/\s+/)
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[1][0]).toUpperCase()
+      }
+      return fullName.trim().slice(0, 2).toUpperCase()
+    }
+    const emailPrefix = session?.user?.email ? session.user.email.split('@')[0] : (authEmail ? authEmail.split('@')[0] : '')
+    if (emailPrefix) {
+      const parts = emailPrefix.split(/[._-]/).filter(Boolean)
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[1][0]).toUpperCase()
+      }
+      const uppers = emailPrefix.match(/[A-Z]/g)
+      if (uppers && uppers.length >= 2) {
+        return (uppers[0] + uppers[1]).toUpperCase()
+      }
+      return emailPrefix.slice(0, 2).toUpperCase()
+    }
+    return 'NU'
+  }
+
+  // Helper to format file name: [Beneficiary Name] + [Total Amount] + [User Initials]
+  const generateExportFileName = (benName, totalAmount, ext = 'xlsx') => {
+    const cleanName = (benName || 'Beneficiary').replace(/[\\/:*?"<>|]/g, '').trim()
+    const num = parseFloat(totalAmount) || 0
+    const cleanAmount = (num % 1 === 0) ? num.toFixed(0) : num.toFixed(2)
+    const initials = getUserInitials()
+    return `${cleanName} - ${cleanAmount} - ${initials}.${ext}`
+  }
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
@@ -318,15 +352,19 @@ export default function Home() {
       return rest
     })
     
+    const totalAmount = exportData.reduce((s, r) => s + (parseFloat(r.TransactionAmount) || 0), 0)
+    const fileName = generateExportFileName('ACH Payout', totalAmount, 'xlsx')
+
     const ws = XLSX.utils.json_to_sheet(exportData)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "ACH Payouts")
-    const fileName = `ACH_Payout_${new Date().toISOString().slice(0, 10)}.xlsx`
+    const cleanAmount = (totalAmount % 1 === 0) ? totalAmount.toFixed(0) : totalAmount.toFixed(2)
+    const tabName = `ACH Payout - ${cleanAmount}`.slice(0, 31)
+    XLSX.utils.book_append_sheet(wb, ws, tabName)
     XLSX.writeFile(wb, fileName)
     logAudit({
       action: 'Exported Excel: Batch ACH Payouts',
       category: 'Excel Export',
-      details: `Generated batch ACH payout file "${fileName}" containing ${exportData.length} records.`
+      details: `Generated batch ACH payout file "${fileName}" containing ${exportData.length} records (Total: EGP ${totalAmount.toLocaleString()}).`
     })
   }
 
@@ -383,15 +421,20 @@ export default function Home() {
     if (payments.length === 0) return toast.error('Please add at least one payment.')
     
     const rows = payments.map(p => generateACHRow(selectedBen, p.amount, p.comment))
+    const totalAmount = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0)
+    const fileName = generateExportFileName(selectedBen.name, totalAmount, 'xlsx')
+
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "ACH")
-    const fileName = `${selectedBen.name} - Payout - ${getFormattedDate()}.xlsx`
+    const cleanAmount = (totalAmount % 1 === 0) ? totalAmount.toFixed(0) : totalAmount.toFixed(2)
+    const tabName = `${(selectedBen.name || 'ACH').replace(/[\\/:*?\[\]]/g, '').slice(0, 18)} - ${cleanAmount}`.slice(0, 31)
+    XLSX.utils.book_append_sheet(wb, ws, tabName)
     XLSX.writeFile(wb, fileName)
+
     logAudit({
       action: 'Exported Excel: Single ACH Payout',
       category: 'Excel Export',
-      details: `Generated ACH payout Excel sheet for "${selectedBen.name}" (${selectedBen.account_number}). Total payments: ${payments.length}, Total Amount: EGP ${payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0).toLocaleString()}. File: "${fileName}".`
+      details: `Generated ACH payout Excel sheet for "${selectedBen.name}" (${selectedBen.account_number}). Total payments: ${payments.length}, Total Amount: EGP ${totalAmount.toLocaleString()}. File: "${fileName}".`
     })
     setShowSinglePayoutModal(false)
   }
@@ -402,15 +445,20 @@ export default function Home() {
     if (payments.length === 0) return toast.error('Please add at least one payment.')
     
     const rows = payments.map(p => generateMisrRow(selectedBen, p.amount, p.comment))
+    const totalAmount = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0)
+    const fileName = generateExportFileName(selectedBen.name, totalAmount, 'xlsx')
+
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "Misr")
-    const fileName = `${selectedBen.name} - Payout - ${getFormattedDate()}.xlsx`
+    const cleanAmount = (totalAmount % 1 === 0) ? totalAmount.toFixed(0) : totalAmount.toFixed(2)
+    const tabName = `${(selectedBen.name || 'Misr').replace(/[\\/:*?\[\]]/g, '').slice(0, 18)} - ${cleanAmount}`.slice(0, 31)
+    XLSX.utils.book_append_sheet(wb, ws, tabName)
     XLSX.writeFile(wb, fileName)
+
     logAudit({
       action: 'Exported Excel: Single Banque Misr Payout',
       category: 'Excel Export',
-      details: `Generated Banque Misr payout Excel sheet for "${selectedBen.name}" (${selectedBen.account_number}). Total payments: ${payments.length}, Total Amount: EGP ${payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0).toLocaleString()}. File: "${fileName}".`
+      details: `Generated Banque Misr payout Excel sheet for "${selectedBen.name}" (${selectedBen.account_number}). Total payments: ${payments.length}, Total Amount: EGP ${totalAmount.toLocaleString()}. File: "${fileName}".`
     })
     setShowSinglePayoutModal(false)
   }
@@ -422,30 +470,39 @@ export default function Home() {
     }
 
     const zip = new JSZip()
-    const dateStr = getFormattedDate()
+    let grandTotal = 0
     
     selectedForPayout.forEach((ben) => {
       const payments = payoutFormData[ben.id] || []
+      const benTotal = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0)
+      grandTotal += benTotal
+
       const rows = payments.map(p => generateACHRow(ben, p.amount, p.comment))
       const ws = XLSX.utils.json_to_sheet(rows)
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, "ACH")
+      const cleanBenAmt = (benTotal % 1 === 0) ? benTotal.toFixed(0) : benTotal.toFixed(2)
+      const tabName = `${(ben.name || 'ACH').replace(/[\\/:*?\[\]]/g, '').slice(0, 18)} - ${cleanBenAmt}`.slice(0, 31)
+      XLSX.utils.book_append_sheet(wb, ws, tabName)
       const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-      zip.file(`${ben.name} - Payout - ${dateStr}.xlsx`, excelBuffer)
+
+      const benFileName = generateExportFileName(ben.name, benTotal, 'xlsx')
+      zip.file(benFileName, excelBuffer)
     })
 
     const zipBlob = await zip.generateAsync({ type: 'blob' })
     const url = URL.createObjectURL(zipBlob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `Group_Payout_${dateStr}.zip`
+    const zipTitle = selectedForPayout.length === 1 ? selectedForPayout[0].name : `Group Payout ACH (${selectedForPayout.length} Beneficiaries)`
+    const zipFileName = generateExportFileName(zipTitle, grandTotal, 'zip')
+    a.download = zipFileName
     a.click()
     URL.revokeObjectURL(url)
     
     logAudit({
       action: 'Exported Excel: Group ACH Payouts (ZIP Archive)',
       category: 'Excel Export',
-      details: `Generated ZIP archive "Group_Payout_${dateStr}.zip" containing ACH Excel sheets for ${selectedForPayout.length} beneficiaries.`
+      details: `Generated ZIP archive "${zipFileName}" containing ACH Excel sheets for ${selectedForPayout.length} beneficiaries (Total: EGP ${grandTotal.toLocaleString()}).`
     })
 
     setShowGroupPayoutModal(false)
@@ -458,25 +515,32 @@ export default function Home() {
       if (payments.some(p => !p.amount) || payments.length === 0) return toast.error(`Please enter all amounts for ${ben.name}`)
     }
 
-    const dateStr = getFormattedDate()
+    let grandTotal = 0
     const rows = []
     selectedForPayout.forEach((ben) => {
       const payments = payoutFormData[ben.id] || []
       payments.forEach(p => {
+        grandTotal += (parseFloat(p.amount) || 0)
         rows.push(generateMisrRow(ben, p.amount, p.comment))
       })
     })
 
+    const benTitle = selectedForPayout.length === 1 
+      ? selectedForPayout[0].name 
+      : `Group Payout (${selectedForPayout.length} Beneficiaries)`
+    const fileName = generateExportFileName(benTitle, grandTotal, 'xlsx')
+
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "Misr")
-    const fileName = `Group_Payout_Misr_${dateStr}.xlsx`
+    const cleanAmount = (grandTotal % 1 === 0) ? grandTotal.toFixed(0) : grandTotal.toFixed(2)
+    const tabName = `${(benTitle || 'Misr').replace(/[\\/:*?\[\]]/g, '').slice(0, 18)} - ${cleanAmount}`.slice(0, 31)
+    XLSX.utils.book_append_sheet(wb, ws, tabName)
     XLSX.writeFile(wb, fileName)
     
     logAudit({
       action: 'Exported Excel: Group Banque Misr Payout',
       category: 'Excel Export',
-      details: `Generated consolidated Banque Misr group payout Excel sheet "${fileName}" for ${selectedForPayout.length} beneficiaries (${rows.length} total payments).`
+      details: `Generated consolidated Banque Misr group payout Excel sheet "${fileName}" for ${selectedForPayout.length} beneficiaries (Total: EGP ${grandTotal.toLocaleString()}).`
     })
 
     setShowGroupPayoutModal(false)
@@ -1513,11 +1577,14 @@ export default function Home() {
       </body>
       </html>`
 
+      const totalAmount = allRows.reduce((s, r) => s + (parseFloat(r.transaction_amount) || 0), 0)
+      const fileName = generateExportFileName(ben.name, totalAmount, 'xls')
+
       const blob = new Blob([excelTemplate], { type: 'application/vnd.ms-excel;charset=utf-8' })
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
-      link.download = `NU_Ledger_${ben.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xls`
+      link.download = fileName
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -1526,7 +1593,7 @@ export default function Home() {
       logAudit({
         action: 'Exported Excel: Beneficiary Ledger',
         category: 'Excel Export',
-        details: `Exported payment audit history ledger for beneficiary "${ben.name}" (Account: ${ben.account_number}) containing ${allRows.length} transaction records.`
+        details: `Exported payment audit history ledger for beneficiary "${ben.name}" (Account: ${ben.account_number}). Total volume: EGP ${totalAmount.toLocaleString()}, File: "${fileName}".`
       })
     } catch (err) {
       console.error(err)
