@@ -2,7 +2,7 @@ import { supabase } from '../../lib/supabaseClient'
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
   if (req.method === 'OPTIONS') {
@@ -111,6 +111,50 @@ export default async function handler(req, res) {
       return res.status(201).json(data[0])
     } catch (error) {
       console.error('Error creating beneficiary:', error)
+      return res.status(500).json({ error: error.message || 'Internal Server Error' })
+    }
+  }
+
+  // PUT: Update an existing beneficiary by ID
+  if (req.method === 'PUT') {
+    const { id, name, account_number, bank_bic, category = 'Operational', employee_code } = req.body
+
+    if (!id) {
+      return res.status(400).json({ error: 'Beneficiary ID is required for update.' })
+    }
+    if (!name || !account_number) {
+      return res.status(400).json({ error: 'Name and Account Number are required.' })
+    }
+
+    try {
+      const payload = {
+        name: name.trim(),
+        account_number: account_number.trim(),
+        bank_bic: bank_bic ? bank_bic.trim() : null,
+        category: category || 'Operational',
+        employee_code: employee_code ? employee_code.trim() : null
+      }
+
+      const { data, error } = await supabase
+        .from('beneficiaries')
+        .update(payload)
+        .eq('id', id)
+        .select()
+
+      if (error) {
+        if (error.code === '23505') {
+          return res.status(409).json({ error: 'Another beneficiary with this account number already exists.' })
+        }
+        throw error
+      }
+
+      if (!data || data.length === 0) {
+        return res.status(404).json({ error: 'Beneficiary not found or update blocked.' })
+      }
+
+      return res.status(200).json(data[0])
+    } catch (error) {
+      console.error('Error updating beneficiary:', error)
       return res.status(500).json({ error: error.message || 'Internal Server Error' })
     }
   }

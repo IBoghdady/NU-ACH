@@ -839,7 +839,7 @@ export default function Home() {
   const [newBenBic, setNewBenBic] = useState('')
   const [newBenEmpCode, setNewBenEmpCode] = useState('')
   const [newBenBankName, setNewBenBankName] = useState('')
-  const [newBenCategory, setNewBenCategory] = useState('Operational Expenses')
+  const [newBenCategory, setNewBenCategory] = useState('Operational')
   const [benFormSuccess, setBenFormSuccess] = useState('')
   const [benFormError, setBenFormError] = useState('')
 
@@ -1012,7 +1012,11 @@ export default function Home() {
         if (c.action === 'update') {
           updatesMap.set(c.existingRow.id, {
             id: c.existingRow.id,
-            ...c.newRow
+            name: c.newRow.name ? c.newRow.name.trim() : c.existingRow.name,
+            account_number: c.newRow.account_number ? c.newRow.account_number.trim() : c.existingRow.account_number,
+            bank_bic: c.newRow.bank_bic ? c.newRow.bank_bic.trim() : c.existingRow.bank_bic,
+            employee_code: c.newRow.employee_code ? c.newRow.employee_code.trim() : c.existingRow.employee_code,
+            category: (c.newRow.category && c.newRow.category !== 'Operational') ? c.newRow.category : (c.existingRow.category || 'Operational')
           })
         }
       })
@@ -1243,9 +1247,9 @@ export default function Home() {
           category: 'Operational'
         }
 
-        if (existingMap.has(newRow.account_number)) {
-          conflicts.push({ newRow, existingRow: existingMap.get(newRow.account_number), action: 'skip' })
-        } else if (!newBensMap.has(newRow.account_number)) {
+        // When importing transactions, only register genuinely new account numbers.
+        // Never overwrite existing curated beneficiaries with raw transaction rows.
+        if (!existingMap.has(newRow.account_number) && !newBensMap.has(newRow.account_number)) {
           newBensMap.add(newRow.account_number)
           newBens.push(newRow)
         }
@@ -1259,16 +1263,9 @@ export default function Home() {
       setActiveView('transactions')
       fetchDashboardData()
 
-      // Then trigger beneficiary conflict modal if needed
-      if (newBens.length > 0 || conflicts.length > 0) {
-        setBulkNewBens(newBens)
-        if (conflicts.length > 0) {
-          setBulkConflicts(conflicts)
-          setPendingTxStats(txStats)
-          setShowBulkConflictModal(true)
-        } else {
-          await executeBulkInsert(newBens, [], txStats)
-        }
+      // Then insert any newly discovered beneficiaries
+      if (newBens.length > 0) {
+        await executeBulkInsert(newBens, [], txStats)
       } else {
         setImportSummary({
           txInserted: txStats.inserted,
@@ -1292,7 +1289,8 @@ export default function Home() {
     setNewBenAcc(row.CreditorAccountNumber || '')
     setNewBenEmpCode(row._originalEmployeeId || '')
     setNewBenBic(row.CreditorBank || '')
-    setNewBenCategory('Operational')
+    setNewBenBankName('')
+    setNewBenCategory('Staff')
     setShowQuickAddModal(true)
   }
 
@@ -1310,23 +1308,58 @@ export default function Home() {
         employee_code: newBenEmpCode?.trim() || null
       }
 
-      const { data, error } = await supabase.from('beneficiaries').insert([benObj]).select().single()
-      if (error) throw error
+      // Check if beneficiary already exists by account_number or employee_code
+      let existingQuery = supabase.from('beneficiaries').select('*')
+      if (benObj.employee_code) {
+        existingQuery = existingQuery.or(`account_number.eq.${benObj.account_number},employee_code.eq.${benObj.employee_code}`)
+      } else {
+        existingQuery = existingQuery.eq('account_number', benObj.account_number)
+      }
+      const { data: existingList, error: findErr } = await existingQuery
+      if (findErr) throw findErr
+
+      let data = null
+      if (existingList && existingList.length > 0) {
+        const targetId = existingList[0].id
+        const { data: updatedData, error: updateErr } = await supabase
+          .from('beneficiaries')
+          .update(benObj)
+          .eq('id', targetId)
+          .select()
+          .single()
+        if (updateErr) throw updateErr
+        data = updatedData
+      } else {
+        const { data: insertedData, error: insertErr } = await supabase
+          .from('beneficiaries')
+          .insert([benObj])
+          .select()
+          .single()
+        if (insertErr) throw insertErr
+        data = insertedData
+      }
       
-      toast.success(`Registered ${newBenName}!`)
+      toast.success(`Saved ${newBenName}!`)
       
       logAudit({
-        action: 'Quick Registered Beneficiary',
+        action: existingList?.length > 0 ? 'Quick Updated Beneficiary' : 'Quick Registered Beneficiary',
         category: 'Beneficiaries',
-        details: `Quick registered beneficiary "${newBenName}" (Account: ${newBenAcc}, Category: ${newBenCategory}${['Staff', 'Students'].includes(newBenCategory) ? `, ID: ${newBenEmpCode}` : ''}).`
+        details: `${existingList?.length > 0 ? 'Updated' : 'Quick registered'} beneficiary "${newBenName}" (Account: ${newBenAcc}, BIC: ${newBenBic || 'N/A'}, Category: ${newBenCategory}${benObj.employee_code ? `, ID: ${benObj.employee_code}` : ''}).`
       })
       
+      let newlyMatchedCount = 0
       const updatedPreview = payoutPreview.map(r => {
-        if (r.id === quickAddRow.id) {
-           r._status = 'Matched'
-           r.CreditorName = data.name
-           r.CreditorAccountNumber = data.account_number
-           r.CreditorBank = data.bank_bic || ''
+        const isSameRow = r._id === quickAddRow?._id
+        const isSameEmp = data.employee_code && r._originalEmployeeId && String(r._originalEmployeeId).trim() === String(data.employee_code).trim()
+        if (isSameRow || isSameEmp) {
+          if (r._status !== 'Matched') newlyMatchedCount++
+          return {
+            ...r,
+            _status: 'Matched',
+            CreditorName: data.name,
+            CreditorAccountNumber: data.account_number,
+            CreditorBank: data.bank_bic || ''
+          }
         }
         return r
       })
@@ -1334,14 +1367,15 @@ export default function Home() {
       
       setPayoutStats(prev => ({
         ...prev,
-        ready: prev.ready + 1,
-        missing: prev.missing - 1
+        matched: (prev?.matched || 0) + newlyMatchedCount,
+        missing: Math.max(0, (prev?.missing || 0) - newlyMatchedCount)
       }))
 
+      fetchBeneficiaries()
       setShowQuickAddModal(false)
       setQuickAddRow(null)
     } catch (error) {
-      toast.error(error.message || 'Failed to quick add beneficiary.')
+      toast.error(error.message || 'Failed to save beneficiary.')
     } finally {
       setIsBulkProcessing(false)
     }
@@ -1418,18 +1452,24 @@ export default function Home() {
         throw new Error(data.error || 'Failed to register beneficiary.')
       }
 
-      toast.success(`Beneficiary "${newBenName}" registered successfully!`)
+      toast.success(`Beneficiary "${newBenName}" ${forceUpdate ? 'updated' : 'registered'} successfully!`)
       logAudit({
         action: forceUpdate ? 'Beneficiary / Vendor Overwritten' : 'New Beneficiary / Vendor Added',
         category: 'Beneficiaries',
         details: `${forceUpdate ? 'Overwrote existing' : 'Created new'} beneficiary "${newBenName}" (Account: ${newBenAcc}, Bank BIC: ${newBenBic || 'N/A'}, Category: ${newBenCategory}${['Staff', 'Students'].includes(newBenCategory) ? `, ID: ${newBenEmpCode}` : ''}).`
       })
+      if (data && data.id) {
+        if (selectedBen && selectedBen.id === data.id) {
+          setSelectedBen(data)
+        }
+        setSelectedForPayout(prev => prev.map(b => b.id === data.id ? data : b))
+      }
       setNewBenName('')
       setNewBenAcc('')
       setNewBenBic('')
       setNewBenEmpCode('')
       setNewBenBankName('')
-      setNewBenCategory('Operational Expenses')
+      setNewBenCategory('Operational')
       setShowAddBen(false)
       fetchBeneficiaries()
     } catch (err) {
@@ -1439,26 +1479,38 @@ export default function Home() {
 
   // Save Beneficiary Edit
   const handleSaveBenEdit = async () => {
+    if (!editBenData?.name?.trim() || !editBenData?.account_number?.trim()) {
+      toast.error('Full Name and Account Number are required.')
+      return
+    }
     try {
-      const { data, error } = await supabase
-        .from('beneficiaries')
-        .update({
+      const res = await fetch('/api/beneficiaries', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editBenData.id,
           name: editBenData.name,
-          category: editBenData.category,
-          employee_code: ['Staff', 'Students'].includes(editBenData.category) ? editBenData.employee_code : null
+          account_number: editBenData.account_number,
+          bank_bic: editBenData.bank_bic || null,
+          category: editBenData.category || 'Operational Expenses',
+          employee_code: editBenData.employee_code ? editBenData.employee_code : null
         })
-        .eq('id', editBenData.id)
-        .select()
-      
-      if (error) throw error
+      })
+
+      const updatedBen = await res.json()
+      if (!res.ok) {
+        throw new Error(updatedBen.error || 'Failed to update beneficiary.')
+      }
       
       toast.success('Beneficiary updated successfully!')
       logAudit({
         action: 'Beneficiary / Vendor Profile Modified',
         category: 'Beneficiaries',
-        details: `Updated beneficiary profile "${selectedBen.name}" (Account: ${selectedBen.account_number}). Changes -> Name: "${selectedBen.name}" → "${editBenData.name}", Category: "${selectedBen.category || 'Operational Expenses'}" → "${editBenData.category}", ID: "${selectedBen.employee_code || 'None'}" → "${editBenData.employee_code || 'None'}".`
+        details: `Updated beneficiary profile "${selectedBen.name}". Changes -> Name: "${selectedBen.name}" → "${updatedBen.name}", Account: "${selectedBen.account_number}" → "${updatedBen.account_number}", BIC: "${selectedBen.bank_bic || 'None'}" → "${updatedBen.bank_bic || 'None'}", Category: "${selectedBen.category || 'Operational'}" → "${updatedBen.category}", ID: "${selectedBen.employee_code || 'None'}" → "${updatedBen.employee_code || 'None'}".`
       })
-      setSelectedBen(data[0])
+      setSelectedBen(updatedBen)
+      setBeneficiaries(prev => prev.map(b => b.id === updatedBen.id ? updatedBen : b))
+      setSelectedForPayout(prev => prev.map(b => b.id === updatedBen.id ? updatedBen : b))
       setIsEditingBen(false)
       fetchBeneficiaries()
     } catch (err) {
@@ -2377,11 +2429,6 @@ export default function Home() {
                         placeholder="Type bank name to find SWIFT..."
                         list="bank-names"
                       />
-                      <datalist id="bank-names">
-                        {banksData.map((bank, i) => (
-                          <option key={i} value={bank.bankName} />
-                        ))}
-                      </datalist>
                     </div>
 
                     <div className={styles.formGroup}>
@@ -2738,14 +2785,57 @@ export default function Home() {
               ) : (
                 <div style={{ flex: 1, paddingRight: '2rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   <div>
-                    <label className={styles.label} style={{ fontSize: '0.75rem' }}>Full Name</label>
+                    <label className={styles.label} style={{ fontSize: '0.75rem' }}>Full Name *</label>
                     <input 
                       type="text" 
                       className={styles.inputField} 
                       value={editBenData?.name || ''}
                       onChange={e => setEditBenData({...editBenData, name: e.target.value})}
-                      style={{ padding: '8px', fontSize: '1rem', fontWeight: 'bold' }}
+                      style={{ padding: '8px', fontSize: '0.95rem', fontWeight: 'bold' }}
                     />
+                  </div>
+                  <div>
+                    <label className={styles.label} style={{ fontSize: '0.75rem' }}>Account Number (IBAN / Local) *</label>
+                    <input 
+                      type="text" 
+                      className={styles.inputField} 
+                      value={editBenData?.account_number || ''}
+                      onChange={e => setEditBenData({...editBenData, account_number: e.target.value})}
+                      style={{ padding: '8px', fontFamily: 'monospace' }}
+                    />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                    <div>
+                      <label className={styles.label} style={{ fontSize: '0.75rem' }}>Search Bank (Auto SWIFT)</label>
+                      <input 
+                        type="text" 
+                        className={styles.inputField} 
+                        placeholder="Type bank name..."
+                        list="bank-names"
+                        value={editBenData?._bankSearch || ''}
+                        onChange={e => {
+                          const val = e.target.value
+                          const found = banksData.find(b => b.bankName === val)
+                          setEditBenData({
+                            ...editBenData,
+                            _bankSearch: val,
+                            bank_bic: found ? found.swiftCode : editBenData.bank_bic
+                          })
+                        }}
+                        style={{ padding: '8px' }}
+                      />
+                    </div>
+                    <div>
+                      <label className={styles.label} style={{ fontSize: '0.75rem' }}>Bank BIC / SWIFT</label>
+                      <input 
+                        type="text" 
+                        className={styles.inputField} 
+                        value={editBenData?.bank_bic || ''}
+                        onChange={e => setEditBenData({...editBenData, bank_bic: e.target.value})}
+                        placeholder="e.g. CIBEEGCX"
+                        style={{ padding: '8px', fontFamily: 'monospace' }}
+                      />
+                    </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                     <div>
@@ -2756,30 +2846,33 @@ export default function Home() {
                         onChange={e => setEditBenData({...editBenData, category: e.target.value})}
                         style={{ padding: '8px' }}
                       >
+                        <option value="Operational">Operational Expenses</option>
                         <option value="Operational Expenses">Operational Expenses</option>
+                        <option value="Construction">Infrastructure & Construction</option>
                         <option value="Infrastructure & Construction">Infrastructure & Construction</option>
+                        <option value="Utilities">Utilities & Energy</option>
                         <option value="Utilities & Energy">Utilities & Energy</option>
+                        <option value="Insurance">Medical & Corporate Insurance</option>
                         <option value="Medical & Corporate Insurance">Medical & Corporate Insurance</option>
                         <option value="Staff">Staff & Salaries</option>
                         <option value="Students">Students</option>
                       </select>
                     </div>
-                    {['Staff', 'Students'].includes(editBenData?.category) && (
-                      <div>
-                        <label className={styles.label} style={{ fontSize: '0.75rem' }}>{editBenData?.category === 'Students' ? 'Student ID' : 'Employee ID'}</label>
-                        <input 
-                          type="text" 
-                          className={styles.inputField} 
-                          value={editBenData?.employee_code || ''}
-                          onChange={e => setEditBenData({...editBenData, employee_code: e.target.value})}
-                          style={{ padding: '8px' }}
-                        />
-                      </div>
-                    )}
+                    <div>
+                      <label className={styles.label} style={{ fontSize: '0.75rem' }}>{editBenData?.category === 'Students' ? 'Student ID' : 'Employee / Vendor ID'}</label>
+                      <input 
+                        type="text" 
+                        className={styles.inputField} 
+                        value={editBenData?.employee_code || ''}
+                        onChange={e => setEditBenData({...editBenData, employee_code: e.target.value})}
+                        placeholder={editBenData?.category === 'Students' ? 'STU-...' : 'EMP-...'}
+                        style={{ padding: '8px' }}
+                      />
+                    </div>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-                    <button className={styles.submitBtn} style={{ padding: '6px 12px', fontSize: '0.85rem' }} onClick={handleSaveBenEdit}>Save</button>
-                    <button className={styles.submitBtn} style={{ padding: '6px 12px', fontSize: '0.85rem', background: 'var(--surface-color)', boxShadow: 'none' }} onClick={() => setIsEditingBen(false)}>Cancel</button>
+                    <button type="button" className={styles.submitBtn} style={{ padding: '6px 12px', fontSize: '0.85rem' }} onClick={handleSaveBenEdit}>💾 Save Changes</button>
+                    <button type="button" className={styles.submitBtn} style={{ padding: '6px 12px', fontSize: '0.85rem', background: 'var(--surface-color)', boxShadow: 'none' }} onClick={() => setIsEditingBen(false)}>Cancel</button>
                   </div>
                 </div>
               )}
@@ -3410,17 +3503,24 @@ export default function Home() {
                 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
                   <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                    <label className={styles.label}>{newBenCategory === 'Students' ? 'Student ID' : 'Employee Code'} (Optional)</label>
+                    <label className={styles.label}>Bank Name (Search SWIFT)</label>
                     <input 
                       type="text" 
-                      value={newBenEmpCode} 
-                      onChange={(e) => setNewBenEmpCode(e.target.value)} 
+                      value={newBenBankName} 
+                      onChange={(e) => {
+                        setNewBenBankName(e.target.value)
+                        const found = banksData.find(b => b.bankName === e.target.value)
+                        if (found) {
+                          setNewBenBic(found.swiftCode)
+                        }
+                      }} 
                       className={styles.inputField}
-                      placeholder={newBenCategory === 'Students' ? "e.g. STU-123" : "e.g. EMP-123"}
+                      placeholder="Type bank name..."
+                      list="bank-names"
                     />
                   </div>
                   <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                    <label className={styles.label}>Bank BIC (Optional)</label>
+                    <label className={styles.label}>Bank BIC / SWIFT</label>
                     <input 
                       type="text" 
                       value={newBenBic} 
@@ -3431,32 +3531,51 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                  <label className={styles.label}>Category *</label>
-                  <select 
-                    value={newBenCategory} 
-                    onChange={(e) => setNewBenCategory(e.target.value)} 
-                    className={styles.selectInput}
-                  >
-                    <option value="Operational">Operational Expenses</option>
-                    <option value="Construction">Infrastructure & Construction</option>
-                    <option value="Utilities">Utilities & Energy</option>
-                    <option value="Insurance">Medical & Corporate Insurance</option>
-                    <option value="Staff">Staff & Salaries</option>
-                    <option value="Students">Students</option>
-                  </select>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                  <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                    <label className={styles.label}>Category *</label>
+                    <select 
+                      value={newBenCategory} 
+                      onChange={(e) => setNewBenCategory(e.target.value)} 
+                      className={styles.selectInput}
+                    >
+                      <option value="Operational">Operational Expenses</option>
+                      <option value="Construction">Infrastructure & Construction</option>
+                      <option value="Utilities">Utilities & Energy</option>
+                      <option value="Insurance">Medical & Corporate Insurance</option>
+                      <option value="Staff">Staff & Salaries</option>
+                      <option value="Students">Students</option>
+                    </select>
+                  </div>
+                  <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                    <label className={styles.label}>{newBenCategory === 'Students' ? 'Student ID' : 'Employee Code'} (Optional)</label>
+                    <input 
+                      type="text" 
+                      value={newBenEmpCode} 
+                      onChange={(e) => setNewBenEmpCode(e.target.value)} 
+                      className={styles.inputField}
+                      placeholder={newBenCategory === 'Students' ? "e.g. STU-123" : "e.g. EMP-123"}
+                    />
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
                   <button type="button" className={styles.submitBtn} style={{ background: 'var(--surface-color)', flex: 0, padding: '10px 20px', boxShadow: 'none' }} onClick={() => setShowQuickAddModal(false)}>Cancel</button>
                   <button type="submit" className={styles.submitBtn} style={{ flex: 0, padding: '10px 20px', whiteSpace: 'nowrap' }} disabled={isBulkProcessing}>
-                    {isBulkProcessing ? 'Registering...' : 'Register & Resolve'}
+                    {isBulkProcessing ? 'Saving...' : 'Save & Resolve'}
                   </button>
                 </div>
               </form>
             </div>
           </div>
         )}
+
+        {/* Global Bank Names Datalist for SWIFT Autocomplete */}
+        <datalist id="bank-names">
+          {banksData.map((bank, i) => (
+            <option key={i} value={bank.bankName} />
+          ))}
+        </datalist>
 
       </main>
     </div>
