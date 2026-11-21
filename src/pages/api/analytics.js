@@ -1,4 +1,12 @@
 import { supabase } from '../../lib/supabaseClient'
+import { getVendorStore, resolveVendorAccountsFromQuery } from '../../lib/vendorStore'
+
+function quotePostgrestList(items) {
+  return items
+    .slice(0, 60)
+    .map(val => `"${String(val).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`)
+    .join(',')
+}
 
 function getCategory(name, accountNumber, catMap) {
   if (catMap[accountNumber] && catMap[accountNumber] !== 'Operational') return catMap[accountNumber]
@@ -18,9 +26,24 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { search, status, startDate, endDate, comment, bankAccount, sourceBank } = req.query
+  const { search, status, startDate, endDate, comment, bankAccount, vendorAccount, sourceBank } = req.query
 
   try {
+    const store = await getVendorStore()
+
+    if (vendorAccount && vendorAccount.trim()) {
+      const resolvedVA = resolveVendorAccountsFromQuery(store, vendorAccount, true)
+      if (resolvedVA.linkedAccounts.length === 0) {
+        return res.status(200).json({
+          success: true,
+          topVendors: [],
+          dailyOutflows: [],
+          categoriesBreakdown: []
+        })
+      }
+      var vaLinkedAccounts = resolvedVA.linkedAccounts
+    }
+
     const { data: bens } = await supabase.from('beneficiaries').select('account_number, category')
     const catMap = {}
     if (bens) {
@@ -40,11 +63,24 @@ export default async function handler(req, res) {
       query = query.in('transaction_status', ['Accepted', 'Matched'])
     }
 
+    if (vaLinkedAccounts && vaLinkedAccounts.length > 0) {
+      query = query.in('creditor_account_number', vaLinkedAccounts)
+    }
+
     if (search) {
-      query = query.or(`creditor_name.ilike.%${search}%,batch_id.ilike.%${search}%,creditor_account_number.ilike.%${search}%`)
+      const resolvedSearch = resolveVendorAccountsFromQuery(store, search, false)
+      const orParts = [
+        `creditor_name.ilike.%${search}%`,
+        `batch_id.ilike.%${search}%`,
+        `creditor_account_number.ilike.%${search}%`
+      ]
+      if (resolvedSearch.linkedAccounts.length > 0) {
+        orParts.push(`creditor_account_number.in.(${quotePostgrestList(resolvedSearch.linkedAccounts)})`)
+      }
+      query = query.or(orParts.join(','))
     }
     if (comment) {
-      query = query.ilike('transaction_purpose', `%${comment}%`)
+      query = query.ilike('comment', `%${comment}%`)
     }
     if (bankAccount) {
       query = query.ilike('creditor_account_number', `%${bankAccount}%`)

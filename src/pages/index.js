@@ -4,6 +4,7 @@ import Script from 'next/script'
 import styles from '../styles/Home.module.css'
 import { supabase } from '../lib/supabaseClient'
 import TransactionReceipt from '../components/TransactionReceipt'
+import VendorLinkingView from '../components/VendorLinkingView'
 import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import toast from 'react-hot-toast'
@@ -561,6 +562,9 @@ export default function Home() {
   const [search, setSearch] = useState('')
   const [commentFilter, setCommentFilter] = useState('')
   const [bankAccountFilter, setBankAccountFilter] = useState('')
+  const [vendorAccountFilter, setVendorAccountFilter] = useState('')
+  const [vendorLookupPrefill, setVendorLookupPrefill] = useState('')
+  const [matchedVendors, setMatchedVendors] = useState([])
   const [status, setStatus] = useState('All')
   const [sourceBank, setSourceBank] = useState('All')
   const [startDate, setStartDate] = useState('')
@@ -582,6 +586,7 @@ export default function Home() {
             search: search,
             comment: commentFilter,
             bankAccount: bankAccountFilter,
+            vendorAccount: vendorAccountFilter,
             status: status,
             sourceBank: sourceBank,
             startDate: startDate,
@@ -602,7 +607,7 @@ export default function Home() {
       }
       fetchAnalytics()
     }
-  }, [activeView, search, commentFilter, bankAccountFilter, status, sourceBank, startDate, endDate])
+  }, [activeView, search, commentFilter, bankAccountFilter, vendorAccountFilter, status, sourceBank, startDate, endDate])
 
   // --- Functions ---Dashboard Transactions
   const fetchDashboardData = async () => {
@@ -615,6 +620,7 @@ export default function Home() {
         search: search,
         comment: commentFilter,
         bankAccount: bankAccountFilter,
+        vendorAccount: vendorAccountFilter,
         status: status,
         sourceBank: sourceBank,
         startDate: startDate,
@@ -625,6 +631,7 @@ export default function Home() {
       if (!res.ok) throw new Error('Failed to retrieve transactions.')
       const data = await res.json()
       setTransactions(data.transactions || [])
+      setMatchedVendors(data.matchedVendors || [])
       setPagination(data.pagination || { totalRecords: 0, currentPage: 1, totalPages: 1 })
       setStats(data.stats || { totalVolume: 0, totalCount: 0, acceptedCount: 0, rejectedCount: 0, returnedCount: 0, successRate: '100.00' })
     } catch (err) {
@@ -653,62 +660,43 @@ export default function Home() {
       return () => clearTimeout(delayDebounce)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, commentFilter, bankAccountFilter, activeView])
+  }, [search, commentFilter, bankAccountFilter, vendorAccountFilter, activeView])
 
   // Export to Excel Function (All Dashboard Data)
   const handleExport = async () => {
     setIsExporting(true)
     try {
       let allRows = []
-      let from = 0
-      let to = 999
+      let exportPage = 1
       let hasMore = true
 
       while (hasMore) {
-        let query = supabase.from('transactions').select('*')
+        const queryParams = new URLSearchParams({
+          page: exportPage.toString(),
+          limit: '1000',
+          skipStats: '1',
+          search: search,
+          comment: commentFilter,
+          bankAccount: bankAccountFilter,
+          vendorAccount: vendorAccountFilter,
+          status: status,
+          sourceBank: sourceBank,
+          startDate: startDate,
+          endDate: endDate
+        })
+        const res = await fetch(`/api/transactions?${queryParams.toString()}`)
+        if (!res.ok) throw new Error('Failed to fetch export batch')
+        const result = await res.json()
+        const data = result.transactions || []
 
-        if (search.trim()) {
-          const term = `%${search.trim()}%`
-          query = query.or(`creditor_name.ilike.${term},batch_id.ilike.${term},transaction_id.ilike.${term}`)
-        }
-        if (commentFilter.trim()) {
-          query = query.ilike('comment', `%${commentFilter.trim()}%`)
-        }
-        if (bankAccountFilter.trim()) {
-          const acc = bankAccountFilter.trim()
-          query = query.or(`creditor_account_number.ilike.%${acc}%,debtor_account_number.ilike.%${acc}%`)
-        }
-        if (status !== 'All') {
-          query = query.eq('transaction_status', status)
-        }
-        if (sourceBank === 'Banque Misr') {
-          query = query.eq('batch_purpose', 'Banque Misr')
-        } else if (sourceBank === 'CIB') {
-          query = query.neq('batch_purpose', 'Banque Misr')
-        }
-        if (startDate) {
-          query = query.gte('batch_settlement_date', startDate)
-        }
-        if (endDate) {
-          query = query.lte('batch_settlement_date', endDate)
-        }
-
-        query = query
-          .order('batch_settlement_date', { ascending: false })
-          .range(from, to)
-
-        const { data, error } = await query
-        if (error) throw error
-
-        if (!data || data.length === 0) {
+        if (data.length === 0) {
           hasMore = false
         } else {
           allRows = [...allRows, ...data]
           if (data.length < 1000) {
             hasMore = false
           } else {
-            from += 1000
-            to += 1000
+            exportPage += 1
           }
         }
       }
@@ -758,6 +746,8 @@ export default function Home() {
               <th>Creditor Name</th>
               <th>Creditor Account Number</th>
               <th>Creditor Party BIC</th>
+              <th>Vendor Account</th>
+              <th>Vendor Name (ERP)</th>
               <th>Transaction Purpose</th>
               <th>Transaction Status</th>
               <th>ISO Status Description</th>
@@ -781,6 +771,8 @@ export default function Home() {
               <td>${row.creditor_name || ''}</td>
               <td class="text">${row.creditor_account_number || ''}</td>
               <td>${row.creditor_party_bic || ''}</td>
+              <td class="text">${row.vendor_account || ''}</td>
+              <td>${row.vendor_name || ''}</td>
               <td>${row.transaction_purpose || ''}</td>
               <td>${row.transaction_status || ''}</td>
               <td>${row.isostatus_description || ''}</td>
@@ -819,6 +811,7 @@ export default function Home() {
   const [beneficiaries, setBeneficiaries] = useState([])
   const [benSearch, setBenSearch] = useState('')
   const [benEmployeeCodeSearch, setBenEmployeeCodeSearch] = useState('')
+  const [benVendorAccountSearch, setBenVendorAccountSearch] = useState('')
   const [isBenLoading, setIsBenLoading] = useState(false)
   const [showAddBen, setShowAddBen] = useState(false)
   const [selectedBen, setSelectedBen] = useState(null)
@@ -888,15 +881,34 @@ export default function Home() {
       }
 
       if (allData.length === 0) return toast.error('No beneficiaries found.')
+
+      let vendorLinkByAcc = new Map()
+      try {
+        const vRes = await fetch('/api/vendors?action=export_all')
+        if (vRes.ok) {
+          const vData = await vRes.json()
+          for (const l of (vData.linked || [])) {
+            const accKey = String(l.account_number || '').trim()
+            if (accKey && !vendorLinkByAcc.has(accKey)) {
+              vendorLinkByAcc.set(accKey, l)
+            }
+          }
+        }
+      } catch (e) {}
       
       // Rename keys for better Excel headers
-      const formattedData = allData.map(row => ({
-        "Name": row.name,
-        "Account Number": row.account_number,
-        "BIC": row.bank_bic || '',
-        "Employee Code": row.employee_code || '',
-        "Category": row.category || ''
-      }))
+      const formattedData = allData.map(row => {
+        const vl = vendorLinkByAcc.get(String(row.account_number || '').trim())
+        return {
+          "Name": row.name,
+          "Account Number": row.account_number,
+          "BIC": row.bank_bic || '',
+          "Employee Code": row.employee_code || '',
+          "Category": row.category || '',
+          "Vendor Account (ERP)": vl?.vendor_account || '',
+          "Vendor Name (ERP)": vl?.vendor_name || ''
+        }
+      })
 
       const ws = XLSX.utils.json_to_sheet(formattedData)
       const wb = XLSX.utils.book_new()
@@ -1384,7 +1396,7 @@ export default function Home() {
   const fetchBeneficiaries = async () => {
     setIsBenLoading(true)
     try {
-      const res = await fetch(`/api/beneficiaries?limit=150&search=${encodeURIComponent(benSearch)}&employeeCode=${encodeURIComponent(benEmployeeCodeSearch)}`)
+      const res = await fetch(`/api/beneficiaries?limit=150&search=${encodeURIComponent(benSearch)}&employeeCode=${encodeURIComponent(benEmployeeCodeSearch)}&vendorAccount=${encodeURIComponent(benVendorAccountSearch)}`)
       if (!res.ok) throw new Error('Could not pull beneficiaries.')
       const data = await res.json()
       setBeneficiaries(data.beneficiaries || [])
@@ -1411,7 +1423,7 @@ export default function Home() {
       return () => clearTimeout(delayDebounce)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [benSearch, benEmployeeCodeSearch, activeView])
+  }, [benSearch, benEmployeeCodeSearch, benVendorAccountSearch, activeView])
 
   // Handle adding new Beneficiary
   const handleAddBeneficiary = async (e, forceUpdate = false) => {
@@ -1905,6 +1917,13 @@ export default function Home() {
           >
             <span>👥</span> Beneficiaries
           </button>
+
+          <button 
+            onClick={() => { setVendorLookupPrefill(''); handleNavClick('vendors'); }} 
+            className={`${styles.navLink} ${activeView === 'vendors' ? styles.active : ''}`}
+          >
+            <span>🔗</span> Vendor Linking
+          </button>
           
           <button 
             onClick={() => handleNavClick('import')} 
@@ -1980,9 +1999,9 @@ export default function Home() {
                 <span className={styles.searchIcon}>🔍</span>
                 <input 
                   type="text" 
-                  placeholder="Search Creditor, Batch..." 
+                  placeholder="Search Creditor, Vendor Acc, Batch..." 
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                   className={styles.searchInput}
                 />
               </div>
@@ -1993,7 +2012,7 @@ export default function Home() {
                   type="text" 
                   placeholder="Filter by Comment..." 
                   value={commentFilter}
-                  onChange={(e) => setCommentFilter(e.target.value)}
+                  onChange={(e) => { setCommentFilter(e.target.value); setPage(1); }}
                   className={styles.searchInput}
                 />
               </div>
@@ -2004,7 +2023,18 @@ export default function Home() {
                   type="text" 
                   placeholder="Bank Account..." 
                   value={bankAccountFilter}
-                  onChange={(e) => setBankAccountFilter(e.target.value)}
+                  onChange={(e) => { setBankAccountFilter(e.target.value); setPage(1); }}
+                  className={styles.searchInput}
+                />
+              </div>
+
+              <div className={styles.searchWrapper}>
+                <span className={styles.searchIcon}>🏷️</span>
+                <input 
+                  type="text" 
+                  placeholder="Vendor Account..." 
+                  value={vendorAccountFilter}
+                  onChange={(e) => { setVendorAccountFilter(e.target.value); setPage(1); }}
                   className={styles.searchInput}
                 />
               </div>
@@ -2203,6 +2233,65 @@ export default function Home() {
                 </button>
               </header>
 
+              {/* Matched ERP Vendor Banner when searching/filtering by Vendor Account */}
+              {matchedVendors.length > 0 && (vendorAccountFilter.trim() || search.trim()) && (
+                <div style={{
+                  background: 'rgba(16, 185, 129, 0.08)',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  borderRadius: '14px',
+                  padding: '0.9rem 1.25rem',
+                  marginBottom: '1rem',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem'
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: '700', color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      🏷️ Matched ERP Vendor{matchedVendors.length > 1 ? `s (${matchedVendors.length})` : ''}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+                      {matchedVendors.slice(0, 4).map(v => (
+                        <button
+                          key={v.va}
+                          type="button"
+                          onClick={() => { setVendorLookupPrefill(v.va); handleNavClick('vendors'); }}
+                          style={{
+                            background: 'var(--bg-card)',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '8px',
+                            padding: '4px 10px',
+                            color: 'var(--text-primary)',
+                            cursor: 'pointer',
+                            fontSize: '0.82rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}
+                          title="Open in Vendor Linking & ERP Directory"
+                        >
+                          <strong style={{ fontFamily: 'monospace', color: '#34d399' }}>{v.va}</strong>
+                          <span>— {v.n}</span>
+                          {v.h && v.h !== 'No' && <span style={{ color: '#f87171', fontSize: '0.72rem' }}>({v.h} Hold)</span>}
+                        </button>
+                      ))}
+                      {matchedVendors.length > 4 && (
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>+{matchedVendors.length - 4} more</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setVendorLookupPrefill(vendorAccountFilter.trim() || matchedVendors[0]?.va || search.trim()); handleNavClick('vendors'); }}
+                    className={styles.copyBtn}
+                    style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.3)', padding: '6px 12px', fontSize: '0.82rem' }}
+                  >
+                    🔗 Open Vendor Card →
+                  </button>
+                </div>
+              )}
+
               {/* Main Table Container */}
               <main className={styles.tableCard}>
                 {isLoading ? (
@@ -2231,6 +2320,7 @@ export default function Home() {
                             <th className={styles.th}>Source</th>
                             <th className={styles.th}>Creditor Name</th>
                             <th className={styles.th}>Creditor Account</th>
+                            <th className={styles.th}>Vendor Acc</th>
                             <th className={styles.th}>Transaction ID</th>
                             <th className={styles.th}>Status</th>
                             <th className={styles.th}>Comment</th>
@@ -2250,6 +2340,29 @@ export default function Home() {
                               <td className={styles.td} style={{ fontWeight: '500' }}>{tx.creditor_name || 'N/A'}</td>
                               <td className={styles.td} style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
                                 {tx.creditor_account_number || 'N/A'}
+                              </td>
+                              <td className={styles.td} style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                                {tx.vendor_account ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => { setVendorLookupPrefill(tx.vendor_account); handleNavClick('vendors'); }}
+                                    style={{
+                                      background: 'rgba(16, 185, 129, 0.12)',
+                                      color: '#34d399',
+                                      border: '1px solid rgba(16, 185, 129, 0.25)',
+                                      borderRadius: '6px',
+                                      padding: '2px 7px',
+                                      cursor: 'pointer',
+                                      fontFamily: 'monospace',
+                                      fontSize: '0.78rem'
+                                    }}
+                                    title={tx.vendor_name ? `ERP: ${tx.vendor_name}` : 'Open in Vendor Linking'}
+                                  >
+                                    {tx.vendor_account}
+                                  </button>
+                                ) : (
+                                  <span style={{ color: 'var(--text-secondary)', opacity: 0.45 }}>—</span>
+                                )}
                               </td>
                               <td className={styles.td} style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', fontFamily: 'monospace' }}>
                                 {tx.transaction_id || 'N/A'}
@@ -2482,12 +2595,12 @@ export default function Home() {
               )}
 
               {/* Search Bar for Beneficiaries */}
-              <section className={styles.filterSection} style={{ gridTemplateColumns: '1fr 150px' }}>
+              <section className={styles.filterSection} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                 <div className={styles.searchWrapper}>
                   <span className={styles.searchIcon}>🔍</span>
                   <input 
                     type="text" 
-                    placeholder="Search Beneficiary Directory by name or account..." 
+                    placeholder="Search Beneficiary by name, bank acc, or vendor acc..." 
                     value={benSearch}
                     onChange={(e) => setBenSearch(e.target.value)}
                     className={styles.searchInput}
@@ -2497,9 +2610,19 @@ export default function Home() {
                   <span className={styles.searchIcon}>👤</span>
                   <input 
                     type="text" 
-                    placeholder="Emp ID..." 
+                    placeholder="Emp / Student ID..." 
                     value={benEmployeeCodeSearch}
                     onChange={(e) => setBenEmployeeCodeSearch(e.target.value)}
+                    className={styles.searchInput}
+                  />
+                </div>
+                <div className={styles.searchWrapper}>
+                  <span className={styles.searchIcon}>🏷️</span>
+                  <input 
+                    type="text" 
+                    placeholder="Vendor Account..." 
+                    value={benVendorAccountSearch}
+                    onChange={(e) => setBenVendorAccountSearch(e.target.value)}
                     className={styles.searchInput}
                   />
                 </div>
@@ -2555,9 +2678,20 @@ export default function Home() {
                         <div className={styles.benValue}>{ben.account_number || 'N/A'}</div>
                         {ben.employee_code && (
                           <>
-                            <div className={styles.benLabel}>Employee Code</div>
+                            <div className={styles.benLabel}>Employee / Student Code</div>
                             <div className={styles.benValue} style={{ color: '#6366f1', fontWeight: '700' }}>#{ben.employee_code}</div>
                           </>
+                        )}
+                        <div className={styles.benLabel}>Vendor Account (ERP)</div>
+                        {ben.vendor_account ? (
+                          <div className={styles.benValue} style={{ color: '#10b981', fontWeight: '700', fontFamily: 'monospace' }}>
+                            🏷️ {ben.vendor_account}
+                            {ben.vendor_links?.length > 1 ? ` (+${ben.vendor_links.length - 1})` : ''}
+                          </div>
+                        ) : (
+                          <div className={styles.benValue} style={{ color: '#f59e0b', fontSize: '0.8rem' }}>
+                            ⚠️ Unlinked in ERP
+                          </div>
                         )}
                         <div className={styles.benLabel}>BIC / Routing</div>
                         <div className={styles.benValue} style={{ marginBottom: '0' }}>
@@ -2614,6 +2748,24 @@ export default function Home() {
                 </div>
               )}
             </>
+          )}
+
+          {/* VENDOR LINKING & ERP MATCHING VIEW */}
+          {activeView === 'vendors' && (
+            <VendorLinkingView
+              initialLookupQuery={vendorLookupPrefill}
+              onNavigateToTransactions={(va) => {
+                setVendorAccountFilter(va)
+                setPage(1)
+                handleNavClick('transactions')
+              }}
+              onGeneratePDF={handleGeneratePDF}
+              formatEGP={formatEGP}
+              logAudit={logAudit}
+              onLinksChanged={() => {
+                if (activeView === 'beneficiaries') fetchBeneficiaries()
+              }}
+            />
           )}
 
         </div>
@@ -2908,6 +3060,67 @@ export default function Home() {
                     </button>
                   </div>
                 </>
+              )}
+
+              <div className={styles.benLabel}>ERP Vendor Account</div>
+              {selectedBen.vendor_account ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '0.75rem' }}>
+                  {(selectedBen.vendor_links && selectedBen.vendor_links.length > 0
+                    ? selectedBen.vendor_links
+                    : [{ vendor_account: selectedBen.vendor_account, vendor_name: selectedBen.vendor_name }]
+                  ).map((vl) => (
+                    <div key={vl.vendor_account} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <div>
+                        <span className={styles.benValue} style={{ fontSize: '0.95rem', color: '#10b981', marginBottom: 0, fontWeight: '700', fontFamily: 'monospace' }}>
+                          🏷️ {vl.vendor_account}
+                        </span>
+                        {vl.vendor_name && (
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                            {vl.vendor_name}{vl.vendor_hold && vl.vendor_hold !== 'No' ? ` (${vl.vendor_hold} Hold)` : ''}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.35rem' }}>
+                        <button
+                          onClick={() => copyToClipboard(vl.vendor_account, `va_${vl.vendor_account}`)}
+                          className={styles.copyBtn}
+                        >
+                          {copiedKey === `va_${vl.vendor_account}` ? '✓ Copied' : '📋 Copy'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            const va = vl.vendor_account
+                            setSelectedBen(null)
+                            setIsEditingBen(false)
+                            setVendorLookupPrefill(va)
+                            handleNavClick('vendors')
+                          }}
+                          className={styles.copyBtn}
+                          style={{ color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.3)' }}
+                        >
+                          🔎 View Vendor
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  <span style={{ fontSize: '0.85rem', color: '#f59e0b' }}>⚠️ Not linked to Vendor.xlsx yet</span>
+                  <button
+                    onClick={() => {
+                      const q = selectedBen.name || selectedBen.account_number
+                      setSelectedBen(null)
+                      setIsEditingBen(false)
+                      setVendorLookupPrefill(q)
+                      handleNavClick('vendors')
+                    }}
+                    className={styles.copyBtn}
+                    style={{ color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.35)' }}
+                  >
+                    🔗 Link Vendor
+                  </button>
+                </div>
               )}
 
               <div className={styles.benLabel}>Bank Routing / BIC / SWIFT</div>
