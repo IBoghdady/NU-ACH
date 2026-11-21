@@ -5,6 +5,7 @@ import styles from '../styles/Home.module.css'
 import { supabase } from '../lib/supabaseClient'
 import TransactionReceipt from '../components/TransactionReceipt'
 import VendorLinkingView from '../components/VendorLinkingView'
+import { ANALYTICS_CATEGORIES, CATEGORY_COLOR_MAP, CATEGORY_HINT_MAP, classifyTransactionComment } from '../lib/commentClassifier'
 import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import toast from 'react-hot-toast'
@@ -563,6 +564,7 @@ export default function Home() {
   const [commentFilter, setCommentFilter] = useState('')
   const [bankAccountFilter, setBankAccountFilter] = useState('')
   const [vendorAccountFilter, setVendorAccountFilter] = useState('')
+  const [commentCategoryFilter, setCommentCategoryFilter] = useState('All')
   const [vendorLookupPrefill, setVendorLookupPrefill] = useState('')
   const [matchedVendors, setMatchedVendors] = useState([])
   const [status, setStatus] = useState('All')
@@ -576,7 +578,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true)
   const [isExporting, setIsExporting] = useState(false)
   const [dashboardError, setDashboardError] = useState('')
-  const [analyticsData, setAnalyticsData] = useState({ topVendors: [], dailyOutflows: [], categoriesBreakdown: [] })
+  const [analyticsData, setAnalyticsData] = useState({ topVendors: [], dailyOutflows: [], categoriesBreakdown: [], totalAnalyzedCount: 0, totalAnalyzedVolume: 0 })
   
   useEffect(() => {
     if (activeView === 'dashboard') {
@@ -587,6 +589,7 @@ export default function Home() {
             comment: commentFilter,
             bankAccount: bankAccountFilter,
             vendorAccount: vendorAccountFilter,
+            commentCategory: commentCategoryFilter,
             status: status,
             sourceBank: sourceBank,
             startDate: startDate,
@@ -598,7 +601,9 @@ export default function Home() {
             setAnalyticsData({ 
               topVendors: data.topVendors || [], 
               dailyOutflows: data.dailyOutflows || [],
-              categoriesBreakdown: data.categoriesBreakdown || []
+              categoriesBreakdown: data.categoriesBreakdown || [],
+              totalAnalyzedCount: data.totalAnalyzedCount || 0,
+              totalAnalyzedVolume: data.totalAnalyzedVolume || 0
             })
           }
         } catch (e) {
@@ -607,7 +612,7 @@ export default function Home() {
       }
       fetchAnalytics()
     }
-  }, [activeView, search, commentFilter, bankAccountFilter, vendorAccountFilter, status, sourceBank, startDate, endDate])
+  }, [activeView, search, commentFilter, bankAccountFilter, vendorAccountFilter, commentCategoryFilter, status, sourceBank, startDate, endDate])
 
   // --- Functions ---Dashboard Transactions
   const fetchDashboardData = async () => {
@@ -621,6 +626,7 @@ export default function Home() {
         comment: commentFilter,
         bankAccount: bankAccountFilter,
         vendorAccount: vendorAccountFilter,
+        commentCategory: commentCategoryFilter,
         status: status,
         sourceBank: sourceBank,
         startDate: startDate,
@@ -648,7 +654,7 @@ export default function Home() {
       fetchDashboardData()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, status, sourceBank, startDate, endDate, activeView])
+  }, [page, status, sourceBank, startDate, endDate, commentCategoryFilter, activeView])
 
   // Debounced search trigger for Dashboard
   useEffect(() => {
@@ -679,6 +685,7 @@ export default function Home() {
           comment: commentFilter,
           bankAccount: bankAccountFilter,
           vendorAccount: vendorAccountFilter,
+          commentCategory: commentCategoryFilter,
           status: status,
           sourceBank: sourceBank,
           startDate: startDate,
@@ -753,6 +760,7 @@ export default function Home() {
               <th>ISO Status Description</th>
               <th>ISO Rejection Reason</th>
               <th>Comment</th>
+              <th>Expense Type</th>
             </tr>
           </thead>
           <tbody>`
@@ -778,6 +786,7 @@ export default function Home() {
               <td>${row.isostatus_description || ''}</td>
               <td>${row.transaction_isostatus_reason || ''}</td>
               <td>${row.comment || ''}</td>
+              <td>${row.comment_category || classifyTransactionComment(row.comment)}</td>
             </tr>`
       })
 
@@ -1615,6 +1624,7 @@ export default function Home() {
               <th>ISO Status Description</th>
               <th>ISO Rejection Reason</th>
               <th>Comment</th>
+              <th>Expense Type</th>
             </tr>
           </thead>
           <tbody>`
@@ -1633,6 +1643,7 @@ export default function Home() {
               <td>${row.isostatus_description || ''}</td>
               <td>${row.transaction_isostatus_reason || ''}</td>
               <td>${row.comment || ''}</td>
+              <td>${row.comment_category || classifyTransactionComment(row.comment)}</td>
             </tr>`
       })
 
@@ -2083,6 +2094,20 @@ export default function Home() {
                   <option value="Banque Misr">Banque Misr</option>
                 </select>
               </div>
+
+              <div>
+                <select 
+                  value={commentCategoryFilter} 
+                  onChange={(e) => { setCommentCategoryFilter(e.target.value); setPage(1); }}
+                  className={styles.selectInput}
+                  title="Filter by Comment Expense Type"
+                >
+                  <option value="All">All Expense Types (Comment)</option>
+                  {ANALYTICS_CATEGORIES.map((cat) => (
+                    <option key={cat.name} value={cat.name}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
             </section>
           )}
 
@@ -2147,30 +2172,108 @@ export default function Home() {
               {/* Analytics Charts */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
                 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.5rem' }}>
-                  <h3 style={{ marginBottom: '1rem', fontWeight: '600' }}>Expense Categories Breakdown</h3>
-                  <div style={{ width: '100%', height: '300px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <div>
+                      <h3 style={{ margin: 0, fontWeight: '600' }}>Expense Categories Breakdown (by Comment)</h3>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        {(analyticsData.totalAnalyzedCount || 0).toLocaleString()} movements categorized
+                      </div>
+                    </div>
+                    {commentCategoryFilter !== 'All' && (
+                      <button
+                        type="button"
+                        onClick={() => { setCommentCategoryFilter('All'); setPage(1); }}
+                        className={styles.copyBtn}
+                      >
+                        ✕ Show All Types
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ width: '100%', height: '230px' }}>
                     <ResponsiveContainer>
                       <PieChart>
                         <Pie
                           data={analyticsData.categoriesBreakdown}
                           cx="50%"
                           cy="50%"
-                          innerRadius={60}
-                          outerRadius={100}
-                          paddingAngle={5}
+                          innerRadius={52}
+                          outerRadius={88}
+                          paddingAngle={3}
                           dataKey="value"
+                          onClick={(entry) => {
+                            if (entry?.name) {
+                              setCommentCategoryFilter(entry.name)
+                              setPage(1)
+                              handleNavClick('transactions')
+                            }
+                          }}
+                          style={{ cursor: 'pointer' }}
                         >
                           {analyticsData.categoriesBreakdown?.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                            <Cell key={`cell-${entry.name || index}`} fill={CATEGORY_COLOR_MAP[entry.name] || PIE_COLORS[index % PIE_COLORS.length]} />
                           ))}
                         </Pie>
                         <RechartsTooltip 
-                          contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px' }}
-                          formatter={(value) => [formatEGP(value), 'Total Amount']}
+                          contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
+                          itemStyle={{ color: 'var(--text-primary)' }}
+                          formatter={(value, name, props) => [
+                            `${formatEGP(value)} (${(props?.payload?.count || 0).toLocaleString()} tx · ${props?.payload?.percentage || 0}%)`,
+                            name
+                          ]}
                         />
-                        <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: '12px', color: 'var(--text-primary)' }} />
                       </PieChart>
                     </ResponsiveContainer>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.5rem' }}>
+                    {analyticsData.categoriesBreakdown?.map((cat, idx) => {
+                      const dotColor = CATEGORY_COLOR_MAP[cat.name] || PIE_COLORS[idx % PIE_COLORS.length]
+                      return (
+                        <button
+                          key={cat.name}
+                          type="button"
+                          onClick={() => {
+                            setCommentCategoryFilter(cat.name)
+                            setPage(1)
+                            handleNavClick('transactions')
+                          }}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            padding: '0.55rem 0.75rem',
+                            borderRadius: '10px',
+                            background: 'var(--bg-hover)',
+                            border: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            width: '100%'
+                          }}
+                          title="Click to view transactions in this category"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', minWidth: 0 }}>
+                            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: '0.84rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {cat.name}
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                                {CATEGORY_HINT_MAP[cat.name] || ''}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <div style={{ fontSize: '0.84rem', fontWeight: '700', fontFamily: 'monospace' }}>
+                              {formatEGP(cat.value)}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                              {(cat.count || 0).toLocaleString()} tx · {cat.percentage ?? 0}%
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
 
@@ -2377,7 +2480,22 @@ export default function Home() {
                                 </span>
                               </td>
                               <td className={styles.td} style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                                {tx.comment || '-'}
+                                <div>{tx.comment || '-'}</div>
+                                {tx.comment_category && (
+                                  <span style={{
+                                    display: 'inline-block',
+                                    marginTop: '3px',
+                                    fontSize: '0.7rem',
+                                    padding: '1px 7px',
+                                    borderRadius: '999px',
+                                    background: `${CATEGORY_COLOR_MAP[tx.comment_category] || '#64748b'}20`,
+                                    color: CATEGORY_COLOR_MAP[tx.comment_category] || '#94a3b8',
+                                    border: `1px solid ${CATEGORY_COLOR_MAP[tx.comment_category] || '#64748b'}44`,
+                                    fontWeight: '600'
+                                  }}>
+                                    {tx.comment_category}
+                                  </span>
+                                )}
                               </td>
                               <td className={`${styles.td} ${styles.amount}`}>
                                 {formatEGP(tx.transaction_amount)}

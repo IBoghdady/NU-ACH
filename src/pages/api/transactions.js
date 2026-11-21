@@ -1,5 +1,7 @@
 import { supabase } from '../../lib/supabaseClient'
 import { getVendorStore, resolveVendorAccountsFromQuery } from '../../lib/vendorStore'
+import { classifyTransactionComment } from '../../lib/commentClassifier'
+import { fetchAllPaginated } from '../../lib/supabasePagination'
 
 function quotePostgrestList(items) {
   return items
@@ -33,6 +35,7 @@ export default async function handler(req, res) {
     comment = '',
     bankAccount = '',
     vendorAccount = '',
+    commentCategory = 'All',
     sourceBank = 'All',
     skipStats = '0'
   } = req.query
@@ -124,30 +127,80 @@ export default async function handler(req, res) {
       return q
     }
 
-    // 1. Build and run the main paginated query
-    let query = applyCommonFilters(
-      supabase.from('transactions').select('*', { count: 'exact' })
-    )
-
-    query = query
-      .order(sortBy, { ascending: sortOrder === 'asc' })
-      .range(from, to)
-
-    const { data: transactions, count, error } = await query
-
-    if (error) {
-      throw error
-    }
-
-    // 2. Fetch Aggregated Statistics in Real-Time
+    // 1. Run paginated query (special path when filtering by JS commentCategory)
+    let transactions = []
     let totalVolume = 0
-    let totalCount = count || 0
+    let totalCount = 0
     let acceptedCount = 0
     let rejectedCount = 0
     let returnedCount = 0
-
-    const usedVendorFilter = Boolean(vaResolved || searchResolvedAccs.length > 0)
     let statsFetched = skipStats === '1'
+
+    const hasCommentCategory = commentCategory && commentCategory !== 'All'
+
+    if (hasCommentCategory) {
+      const allCandidateMeta = await fetchAllPaginated(() =>
+        applyCommonFilters(
+          supabase.from('transactions').select('id, comment, transaction_amount, transaction_status', { count: 'exact' })
+        )
+          .order(sortBy, { ascending: sortOrder === 'asc' })
+          .order('id', { ascending: true })
+      )
+
+      const filteredMeta = allCandidateMeta.filter(
+        r => classifyTransactionComment(r.comment) === commentCategory
+      )
+      totalCount = filteredMeta.length
+
+      if (!statsFetched) {
+        for (const row of filteredMeta) {
+          totalVolume += parseFloat(row.transaction_amount) || 0
+          if (row.transaction_status === 'Accepted') acceptedCount++
+          else if (row.transaction_status === 'Rejected') rejectedCount++
+          else if (row.transaction_status === 'Returned') returnedCount++
+        }
+        statsFetched = true
+      }
+
+      const pageIds = filteredMeta.slice(from, to + 1).map(r => r.id)
+      if (pageIds.length > 0) {
+        const ID_CHUNK = 250
+        const idChunks = []
+        for (let i = 0; i < pageIds.length; i += ID_CHUNK) {
+          idChunks.push(pageIds.slice(i, i + ID_CHUNK))
+        }
+        const chunkResults = await Promise.all(
+          idChunks.map(ids => supabase.from('transactions').select('*').in('id', ids))
+        )
+        const byId = new Map()
+        for (const cr of chunkResults) {
+          if (cr.error) throw cr.error
+          for (const row of (cr.data || [])) {
+            byId.set(row.id, row)
+          }
+        }
+        transactions = pageIds.map(id => byId.get(id)).filter(Boolean)
+      }
+    } else {
+      let query = applyCommonFilters(
+        supabase.from('transactions').select('*', { count: 'exact' })
+      )
+
+      query = query
+        .order(sortBy, { ascending: sortOrder === 'asc' })
+        .range(from, to)
+
+      const { data: txRows, count, error } = await query
+
+      if (error) {
+        throw error
+      }
+      transactions = txRows || []
+      totalCount = count || 0
+    }
+
+    // 2. Fetch Aggregated Statistics in Real-Time (when not already computed above)
+    const usedVendorFilter = Boolean(vaResolved || searchResolvedAccs.length > 0)
 
     if (usedVendorFilter && !statsFetched) {
       // Compute exact stats directly across all matching vendor rows
@@ -217,14 +270,15 @@ export default async function handler(req, res) {
       })
     }
 
-    // Enrich transactions with linked vendor_account and vendor_name
+    // Enrich transactions with linked vendor_account, vendor_name, and comment_category
     const enrichedTransactions = (transactions || []).map(tx => {
       const acc = String(tx.creditor_account_number || '').trim()
       const vLinks = acc ? (store.linksByBankAccount.get(acc) || []) : []
       return {
         ...tx,
         vendor_account: vLinks[0]?.vendor_account || null,
-        vendor_name: vLinks[0]?.vendor_name || null
+        vendor_name: vLinks[0]?.vendor_name || null,
+        comment_category: classifyTransactionComment(tx.comment)
       }
     })
 
