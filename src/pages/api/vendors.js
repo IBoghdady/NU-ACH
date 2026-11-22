@@ -1,5 +1,11 @@
 import { supabase } from '../../lib/supabaseClient'
-import { getVendorStore, normalizeCode } from '../../lib/vendorStore'
+import {
+  getVendorStore,
+  normalizeCode,
+  saveVendorLink,
+  removeVendorLink,
+  stripEmployeeCodeIfVendorTag
+} from '../../lib/vendorStore'
 
 async function fetchAllBeneficiariesFromDB() {
   let all = []
@@ -94,12 +100,14 @@ export default async function handler(req, res) {
           else if (vnL.includes(lower)) pushVendor(v, 40)
         }
 
-        // Also check if query matches a linked bank account or beneficiary name
+        // Also check if query matches a linked bank account, beneficiary name, or custom linked vendor account
         for (const l of store.links) {
+          const lVaL = String(l.vendor_account || '').toLowerCase()
+          const lVnL = String(l.vendor_name || '').toLowerCase()
           const accL = String(l.account_number || '').toLowerCase()
           const bnL = String(l.ben_name || '').toLowerCase()
-          if (accL.includes(lower) || bnL.includes(lower)) {
-            const vObj = store.staticVendorByExactLower.get(l.vendor_account.toLowerCase()) || {
+          if (lVaL.includes(lower) || lVnL.includes(lower) || accL.includes(lower) || bnL.includes(lower)) {
+            const vObj = store.staticVendorByExactLower.get(lVaL) || {
               va: l.vendor_account,
               n: l.vendor_name,
               h: '',
@@ -107,7 +115,8 @@ export default async function handler(req, res) {
               g: '',
               c: 'EGP'
             }
-            pushVendor(vObj, accL === lower ? 95 : 50)
+            const rank = (lVaL === lower || accL === lower) ? 95 : 50
+            pushVendor(vObj, rank)
           }
         }
 
@@ -181,7 +190,7 @@ export default async function handler(req, res) {
                 account_number: live ? live.account_number : l.account_number,
                 bank_bic: live ? live.bank_bic : l.bank_bic,
                 category: live ? live.category : l.category,
-                employee_code: live ? live.employee_code : null,
+                employee_code: live ? stripEmployeeCodeIfVendorTag(live.employee_code) : null,
                 method: l.method,
                 score: l.score,
                 source: l.source
@@ -247,6 +256,7 @@ export default async function handler(req, res) {
         if (error) throw error
         const items = (data || []).map(b => ({
           ...b,
+          employee_code: stripEmployeeCodeIfVendorTag(b.employee_code),
           existing_links: store.linksByBenId.get(Number(b.id)) || store.linksByBankAccount.get(String(b.account_number).trim()) || []
         }))
         return res.status(200).json({ items })
@@ -309,7 +319,7 @@ export default async function handler(req, res) {
             account_number: b.account_number,
             bank_bic: b.bank_bic || '',
             category: b.category || 'Operational',
-            employee_code: b.employee_code || '',
+            employee_code: stripEmployeeCodeIfVendorTag(b.employee_code) || '',
             is_mobile_wallet: isMobileAccount(b.account_number) ? 'Yes (InstaPay/Wallet)' : 'No'
           }))
 
@@ -355,7 +365,7 @@ export default async function handler(req, res) {
         linkedBensCount: allBens.length - unlinkedBensAll.length,
         unlinkedBensCount: unlinkedBensAll.length,
         unlinkedOperationalNoMobileCount: unlinkedBensAll.filter(
-          b => (b.category || '').startsWith('Operational') && !isMobileAccount(b.account_number)
+          b => !['Staff', 'Satff', 'Students'].includes(b.category) && !isMobileAccount(b.account_number)
         ).length,
         totalLinksCount: store.links.length,
         reviewCount: store.review.length,
@@ -391,13 +401,16 @@ export default async function handler(req, res) {
           )
         }
       } else if (tab === 'unlinked_bens') {
-        filtered = unlinkedBensAll
+        filtered = unlinkedBensAll.map(b => ({
+          ...b,
+          employee_code: stripEmployeeCodeIfVendorTag(b.employee_code)
+        }))
         if (benFilter === 'operational_no_mobile') {
-          filtered = filtered.filter(b => (b.category || 'Operational').startsWith('Operational') && !isMobileAccount(b.account_number))
+          filtered = filtered.filter(b => !['Staff', 'Satff', 'Students'].includes(b.category) && !isMobileAccount(b.account_number))
         } else if (benFilter === 'operational') {
-          filtered = filtered.filter(b => (b.category || 'Operational').startsWith('Operational'))
+          filtered = filtered.filter(b => !['Staff', 'Satff', 'Students'].includes(b.category))
         } else if (benFilter === 'staff_students') {
-          filtered = filtered.filter(b => !(b.category || 'Operational').startsWith('Operational'))
+          filtered = filtered.filter(b => ['Staff', 'Satff', 'Students'].includes(b.category))
         } else if (benFilter === 'mobile_only') {
           filtered = filtered.filter(b => isMobileAccount(b.account_number))
         }
@@ -456,13 +469,6 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const { action, vendor_account, vendor_name, ben_id, ben_name, account_number, method = 'manual' } = req.body
 
-      if (!store.dbAvailable) {
-        return res.status(400).json({
-          needsSqlSetup: true,
-          error: 'Database table "vendor_links" is not created yet in Supabase. Please run setup_vendors.sql in Supabase SQL Editor.'
-        })
-      }
-
       const va = String(vendor_account || '').trim()
       const acc = String(account_number || '').trim()
       if (!va || !acc) {
@@ -470,40 +476,55 @@ export default async function handler(req, res) {
       }
 
       if (action === 'link') {
-        const payload = {
-          vendor_account: va,
-          vendor_name: vendor_name || null,
-          ben_id: ben_id ? Number(ben_id) : null,
-          ben_name: ben_name || null,
-          account_number: acc,
-          status: 'linked',
-          method
+        const result = await saveVendorLink(store, {
+          vendorAccount: va,
+          vendorName: vendor_name,
+          benId: ben_id,
+          benName: ben_name,
+          accountNumber: acc,
+          method,
+          replaceExisting: false
+        })
+        if (result.needsSqlSetup) {
+          return res.status(400).json({
+            needsSqlSetup: true,
+            error: 'Database table "vendor_links" is required to link this record. Please run setup_vendors.sql in Supabase SQL Editor.'
+          })
         }
-        const { error } = await supabase
-          .from('vendor_links')
-          .upsert(payload, { onConflict: 'vendor_account,account_number' })
-        if (error) throw error
-
-        // Also update beneficiaries.vendor_account if that column exists (best effort)
-        try {
-          if (ben_id) {
-            await supabase.from('beneficiaries').update({ vendor_account: va }).eq('id', Number(ben_id))
-          } else {
-            await supabase.from('beneficiaries').update({ vendor_account: va }).eq('account_number', acc)
-          }
-        } catch (e) {}
-
         return res.status(200).json({ success: true, message: 'Vendor linked successfully.' })
       }
 
-      if (action === 'unlink' || action === 'reject_review') {
+      if (action === 'unlink') {
+        const result = await removeVendorLink(store, {
+          vendorAccount: va,
+          vendorName: vendor_name,
+          benId: ben_id,
+          benName: ben_name,
+          accountNumber: acc
+        })
+        if (result.needsSqlSetup) {
+          return res.status(400).json({
+            needsSqlSetup: true,
+            error: 'Database table "vendor_links" is required to unlink pre-matched records. Please run setup_vendors.sql in Supabase SQL Editor.'
+          })
+        }
+        return res.status(200).json({ success: true, message: 'Unlinked successfully.' })
+      }
+
+      if (action === 'reject_review') {
+        if (!store.dbAvailable) {
+          return res.status(400).json({
+            needsSqlSetup: true,
+            error: 'Database table "vendor_links" is not created yet in Supabase. Please run setup_vendors.sql in Supabase SQL Editor.'
+          })
+        }
         const payload = {
           vendor_account: va,
           vendor_name: vendor_name || null,
           ben_id: ben_id ? Number(ben_id) : null,
           ben_name: ben_name || null,
           account_number: acc,
-          status: action === 'unlink' ? 'unlinked' : 'rejected_review',
+          status: 'rejected_review',
           method
         }
         const { error } = await supabase
@@ -511,17 +532,7 @@ export default async function handler(req, res) {
           .upsert(payload, { onConflict: 'vendor_account,account_number' })
         if (error) throw error
 
-        if (action === 'unlink') {
-          try {
-            if (ben_id) {
-              await supabase.from('beneficiaries').update({ vendor_account: null }).eq('id', Number(ben_id))
-            } else {
-              await supabase.from('beneficiaries').update({ vendor_account: null }).eq('account_number', acc)
-            }
-          } catch (e) {}
-        }
-
-        return res.status(200).json({ success: true, message: action === 'unlink' ? 'Unlinked successfully.' : 'Suggestion dismissed.' })
+        return res.status(200).json({ success: true, message: 'Suggestion dismissed.' })
       }
 
       return res.status(400).json({ error: 'Invalid action' })

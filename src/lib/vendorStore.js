@@ -9,6 +9,18 @@ export function normalizeCode(val) {
   return String(val || '').trim().toLowerCase().replace(/\s+/g, '')
 }
 
+export function stripEmployeeCodeIfVendorTag(code) {
+  const s = String(code || '').trim()
+  if (!s || /^VA:/i.test(s)) return null
+  return s
+}
+
+export function parseVendorTagFromEmployeeCode(code) {
+  const s = String(code || '').trim()
+  if (!/^VA:/i.test(s)) return []
+  return s.slice(3).split(',').map(x => x.trim()).filter(Boolean)
+}
+
 // Pre-index static vendors once at module load
 const staticVendorByNorm = new Map()
 const staticVendorByExactLower = new Map()
@@ -76,6 +88,48 @@ export async function getVendorStore() {
       source: 'auto'
     })
   }
+
+  // Merge manual Vendor Accounts saved directly on beneficiaries (e.g. `VA:<vendor_account>` in employee_code fallback)
+  try {
+    const { data: benRows } = await supabase
+      .from('beneficiaries')
+      .select('id, name, account_number, bank_bic, category, employee_code')
+      .not('employee_code', 'is', null)
+      .limit(1000)
+
+    if (benRows && benRows.length > 0) {
+      for (const b of benRows) {
+        const rawCode = String(b.employee_code || '').trim()
+        let vas = parseVendorTagFromEmployeeCode(rawCode)
+
+        // Also treat non-Staff/Student code exact-matching a Vendor.xlsx vendor_account as a vendor link
+        if (vas.length === 0 && rawCode && !['Staff', 'Satff', 'Students'].includes(b.category)) {
+          const vMatch = staticVendorByExactLower.get(rawCode.toLowerCase()) || staticVendorByNorm.get(normalizeCode(rawCode))
+          if (vMatch) vas = [vMatch.va]
+        }
+
+        for (const rawVa of vas) {
+          const vObj = staticVendorByExactLower.get(rawVa.toLowerCase()) || staticVendorByNorm.get(normalizeCode(rawVa))
+          const va = vObj ? vObj.va : rawVa
+          const acc = String(b.account_number || '').trim()
+          if (!va || !acc) continue
+          const key = `${va}::${acc}`
+          linkMap.set(key, {
+            vendor_account: va,
+            vendor_name: vObj ? vObj.n : (b.name || ''),
+            ben_id: b.id,
+            ben_name: b.name || '',
+            account_number: acc,
+            bank_bic: b.bank_bic || null,
+            category: b.category || 'Vendor',
+            method: 'manual',
+            score: 1,
+            source: 'manual'
+          })
+        }
+      }
+    }
+  } catch (e) {}
 
   for (const row of dbRows) {
     const va = String(row.vendor_account || '').trim()
@@ -186,7 +240,7 @@ export function resolveVendorAccountsFromQuery(store, query, allowPartial = fals
   const matchedVendors = []
   const seenVa = new Set()
 
-  // 1. Exact or space-insensitive match on vendor_account
+  // 1. Exact or space-insensitive match on vendor_account (static vendors + dynamic manual links)
   if (store.staticVendorByExactLower.has(lower)) {
     const v = store.staticVendorByExactLower.get(lower)
     matchedVendors.push(v)
@@ -195,6 +249,14 @@ export function resolveVendorAccountsFromQuery(store, query, allowPartial = fals
     const v = store.staticVendorByNorm.get(norm)
     matchedVendors.push(v)
     seenVa.add(v.va.toLowerCase())
+  } else if (store.linksByVendorAccount.has(lower)) {
+    const first = store.linksByVendorAccount.get(lower)[0]
+    matchedVendors.push({ va: first.vendor_account, n: first.vendor_name, h: 'No', p: '', g: '', c: 'EGP' })
+    seenVa.add(first.vendor_account.toLowerCase())
+  } else if (store.linksByVendorNorm.has(norm)) {
+    const first = store.linksByVendorNorm.get(norm)[0]
+    matchedVendors.push({ va: first.vendor_account, n: first.vendor_name, h: 'No', p: '', g: '', c: 'EGP' })
+    seenVa.add(first.vendor_account.toLowerCase())
   }
 
   // 2. Partial match on vendor_account or vendor_name (only when allowPartial=true and query >= 2 chars)
@@ -208,6 +270,18 @@ export function resolveVendorAccountsFromQuery(store, query, allowPartial = fals
           matchedVendors.push(v)
           seenVa.add(vVaLower)
           if (matchedVendors.length >= 50) break
+        }
+      }
+    }
+    for (const l of store.links) {
+      if (matchedVendors.length >= 50) break
+      const lVaLower = String(l.vendor_account || '').toLowerCase()
+      const lVaNorm = normalizeCode(l.vendor_account)
+      const lVnLower = String(l.vendor_name || '').toLowerCase()
+      if (lVaLower.includes(lower) || lVaNorm.includes(norm) || lVnLower.includes(lower)) {
+        if (!seenVa.has(lVaLower)) {
+          matchedVendors.push({ va: l.vendor_account, n: l.vendor_name, h: 'No', p: '', g: '', c: 'EGP' })
+          seenVa.add(lVaLower)
         }
       }
     }
@@ -229,4 +303,198 @@ export function resolveVendorAccountsFromQuery(store, query, allowPartial = fals
     linkedAccounts: Array.from(linkedAccountsSet),
     links: matchedLinks
   }
+}
+
+/**
+ * Resolves canonical Vendor Account & Name from store, and persists a link either in
+ * `vendor_links` (when created) or safely via `VA:<code(s)>` in `beneficiaries.employee_code` fallback.
+ */
+export async function saveVendorLink(store, {
+  vendorAccount,
+  vendorName = '',
+  benId = null,
+  benName = '',
+  accountNumber,
+  method = 'manual',
+  replaceExisting = false
+}) {
+  const vaRaw = String(vendorAccount || '').trim()
+  const accTrim = String(accountNumber || '').trim()
+  if (!vaRaw || !accTrim) {
+    return { saved: false, needsSqlSetup: false, error: 'vendor_account and account_number are required.' }
+  }
+
+  const vObj =
+    store.staticVendorByExactLower.get(vaRaw.toLowerCase()) ||
+    store.staticVendorByNorm.get(normalizeCode(vaRaw))
+  const canonicalVa = vObj ? vObj.va : vaRaw
+  const resolvedVendorName = vObj ? vObj.n : (vendorName || benName || '')
+
+  // Already linked cleanly in store?
+  const existingForAcc = store.linksByBankAccount.get(accTrim) || []
+  const alreadyLinked = existingForAcc.some(l => l.vendor_account.toLowerCase() === canonicalVa.toLowerCase())
+  if (alreadyLinked && !replaceExisting) {
+    return { saved: true, needsSqlSetup: false, vendor_account: canonicalVa, vendor_name: resolvedVendorName }
+  }
+
+  if (store.dbAvailable) {
+    if (replaceExisting) {
+      for (const oldLink of existingForAcc) {
+        if (oldLink.vendor_account.toLowerCase() !== canonicalVa.toLowerCase()) {
+          await supabase
+            .from('vendor_links')
+            .upsert({
+              vendor_account: oldLink.vendor_account,
+              vendor_name: oldLink.vendor_name || null,
+              ben_id: benId ? Number(benId) : null,
+              ben_name: benName || null,
+              account_number: accTrim,
+              status: 'unlinked',
+              method: 'manual'
+            }, { onConflict: 'vendor_account,account_number' })
+        }
+      }
+    }
+
+    const { error: upsertErr } = await supabase
+      .from('vendor_links')
+      .upsert({
+        vendor_account: canonicalVa,
+        vendor_name: resolvedVendorName || null,
+        ben_id: benId ? Number(benId) : null,
+        ben_name: benName || null,
+        account_number: accTrim,
+        status: 'linked',
+        method
+      }, { onConflict: 'vendor_account,account_number' })
+    if (upsertErr) throw upsertErr
+
+    try {
+      const q = supabase.from('beneficiaries').update({ vendor_account: canonicalVa })
+      await (benId ? q.eq('id', Number(benId)) : q.eq('account_number', accTrim))
+    } catch (e) {}
+
+    return { saved: true, needsSqlSetup: false, vendor_account: canonicalVa, vendor_name: resolvedVendorName }
+  }
+
+  // Fallback when vendor_links table has not been created yet in Supabase:
+  // Store `VA:<vendor_account>` in beneficiaries.employee_code for non-Staff/Student rows without overwriting EMP/STU codes.
+  let benRow = null
+  if (benId) {
+    const { data } = await supabase.from('beneficiaries').select('id, name, account_number, category, employee_code').eq('id', Number(benId)).limit(1)
+    benRow = data?.[0] || null
+  }
+  if (!benRow) {
+    const { data } = await supabase.from('beneficiaries').select('id, name, account_number, category, employee_code').eq('account_number', accTrim).limit(1)
+    benRow = data?.[0] || null
+  }
+
+  if (benRow) {
+    const isStaffOrStudent = ['Staff', 'Satff', 'Students'].includes(benRow.category)
+    const rawCode = String(benRow.employee_code || '').trim()
+    const isVendorTagged = /^VA:/i.test(rawCode)
+    const existingVas = parseVendorTagFromEmployeeCode(rawCode)
+    const isSameStaticVa = rawCode && rawCode.toLowerCase() === canonicalVa.toLowerCase()
+
+    if (!isStaffOrStudent && (!rawCode || isVendorTagged || isSameStaticVa)) {
+      const nextVas = replaceExisting
+        ? [canonicalVa]
+        : Array.from(new Set([...existingVas, canonicalVa]))
+      const newTag = `VA:${nextVas.join(',')}`
+      const { error: updErr } = await supabase
+        .from('beneficiaries')
+        .update({ employee_code: newTag })
+        .eq('id', benRow.id)
+      if (!updErr) {
+        return { saved: true, needsSqlSetup: false, vendor_account: canonicalVa, vendor_name: resolvedVendorName, usedFallback: true }
+      }
+    }
+  }
+
+  if (alreadyLinked) {
+    return { saved: true, needsSqlSetup: false, vendor_account: canonicalVa, vendor_name: resolvedVendorName }
+  }
+
+  return { saved: false, needsSqlSetup: true, vendor_account: canonicalVa, vendor_name: resolvedVendorName }
+}
+
+/**
+ * Unlinks a Vendor Account from a bank account (supports both `vendor_links` table and `VA:` fallback).
+ */
+export async function removeVendorLink(store, {
+  vendorAccount = '',
+  vendorName = '',
+  benId = null,
+  benName = '',
+  accountNumber
+}) {
+  const vaTrim = String(vendorAccount || '').trim()
+  const accTrim = String(accountNumber || '').trim()
+
+  if (store.dbAvailable) {
+    const targets = vaTrim
+      ? [{ va: vaTrim, vn: vendorName }]
+      : (store.linksByBankAccount.get(accTrim) || []).map(l => ({ va: l.vendor_account, vn: l.vendor_name }))
+
+    for (const t of targets) {
+      const { error } = await supabase
+        .from('vendor_links')
+        .upsert({
+          vendor_account: t.va,
+          vendor_name: t.vn || null,
+          ben_id: benId ? Number(benId) : null,
+          ben_name: benName || null,
+          account_number: accTrim,
+          status: 'unlinked',
+          method: 'manual'
+        }, { onConflict: 'vendor_account,account_number' })
+      if (error) throw error
+    }
+
+    try {
+      const q = supabase.from('beneficiaries').update({ vendor_account: null })
+      await (benId ? q.eq('id', Number(benId)) : q.eq('account_number', accTrim))
+    } catch (e) {}
+
+    // Also strip any fallback VA tag on beneficiaries row if present
+    try {
+      const { data } = await (benId
+        ? supabase.from('beneficiaries').select('id, employee_code').eq('id', Number(benId)).limit(1)
+        : supabase.from('beneficiaries').select('id, employee_code').eq('account_number', accTrim).limit(1))
+      const row = data?.[0]
+      if (row && /^VA:/i.test(String(row.employee_code || ''))) {
+        const remaining = vaTrim
+          ? parseVendorTagFromEmployeeCode(row.employee_code).filter(v => v.toLowerCase() !== vaTrim.toLowerCase())
+          : []
+        await supabase.from('beneficiaries').update({
+          employee_code: remaining.length > 0 ? `VA:${remaining.join(',')}` : null
+        }).eq('id', row.id)
+      }
+    } catch (e) {}
+
+    return { saved: true, needsSqlSetup: false }
+  }
+
+  // Fallback check: can unlink if stored via VA: tag or exact matching vendor code on beneficiaries.employee_code
+  const { data } = await (benId
+    ? supabase.from('beneficiaries').select('id, category, employee_code').eq('id', Number(benId)).limit(1)
+    : supabase.from('beneficiaries').select('id, category, employee_code').eq('account_number', accTrim).limit(1))
+  const row = data?.[0]
+  if (row) {
+    const rawCode = String(row.employee_code || '').trim()
+    const isTagged = /^VA:/i.test(rawCode)
+    const isLegacyNonStaffVa = rawCode && !['Staff', 'Satff', 'Students'].includes(row.category) && (!vaTrim || rawCode.toLowerCase() === vaTrim.toLowerCase())
+    if (isTagged || isLegacyNonStaffVa) {
+      const remaining = isTagged && vaTrim
+        ? parseVendorTagFromEmployeeCode(rawCode).filter(v => v.toLowerCase() !== vaTrim.toLowerCase())
+        : []
+      const { error } = await supabase
+        .from('beneficiaries')
+        .update({ employee_code: remaining.length > 0 ? `VA:${remaining.join(',')}` : null })
+        .eq('id', row.id)
+      if (!error) return { saved: true, needsSqlSetup: false }
+    }
+  }
+
+  return { saved: false, needsSqlSetup: true }
 }

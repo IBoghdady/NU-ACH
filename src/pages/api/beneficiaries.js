@@ -1,78 +1,48 @@
 import { supabase } from '../../lib/supabaseClient'
-import { getVendorStore, resolveVendorAccountsFromQuery, normalizeCode } from '../../lib/vendorStore'
+import {
+  getVendorStore,
+  resolveVendorAccountsFromQuery,
+  saveVendorLink,
+  removeVendorLink,
+  stripEmployeeCodeIfVendorTag
+} from '../../lib/vendorStore'
 
 async function syncBeneficiaryVendorLink(store, { ben, vendorAccount, clearWhenEmpty = false }) {
   const vaRaw = String(vendorAccount || '').trim()
   if (!vaRaw) {
-    if (clearWhenEmpty && store.dbAvailable && ben) {
-      const activeLinks = [
-        ...(store.linksByBenId.get(Number(ben.id)) || []),
-        ...(store.linksByBankAccount.get(String(ben.account_number || '').trim()) || [])
-      ]
-      const seen = new Set()
-      for (const l of activeLinks) {
-        const key = `${l.vendor_account}::${ben.account_number}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        await supabase
-          .from('vendor_links')
-          .upsert({
-            vendor_account: l.vendor_account,
-            vendor_name: l.vendor_name || null,
-            ben_id: ben.id,
-            ben_name: ben.name,
-            account_number: ben.account_number,
-            status: 'unlinked',
-            method: 'manual'
-          }, { onConflict: 'vendor_account,account_number' })
+    if (clearWhenEmpty && ben) {
+      const remRes = await removeVendorLink(store, {
+        vendorAccount: '',
+        benId: ben.id,
+        benName: ben.name,
+        accountNumber: ben.account_number
+      })
+      return {
+        vendorLinkSaved: remRes.saved,
+        needsSqlSetup: remRes.needsSqlSetup,
+        vendor_account: null,
+        vendor_name: null
       }
-      try {
-        await supabase.from('beneficiaries').update({ vendor_account: null }).eq('id', ben.id)
-      } catch (e) {}
     }
     return { vendorLinkSaved: true, needsSqlSetup: false, vendor_account: null, vendor_name: null }
   }
 
-  const vObj =
-    store.staticVendorByExactLower.get(vaRaw.toLowerCase()) ||
-    store.staticVendorByNorm.get(normalizeCode(vaRaw))
-  const canonicalVa = vObj ? vObj.va : vaRaw
-  const vendorName = vObj ? vObj.n : (ben?.name || '')
+  const saveRes = await saveVendorLink(store, {
+    vendorAccount: vaRaw,
+    vendorName: '',
+    benId: ben.id,
+    benName: ben.name,
+    accountNumber: ben.account_number,
+    method: 'manual',
+    replaceExisting: true
+  })
 
-  // If this exact vendor_account <-> bank account link already exists in store, no DB write needed
-  const alreadyLinked = (store.linksByBankAccount.get(String(ben?.account_number || '').trim()) || [])
-    .some(l => l.vendor_account.toLowerCase() === canonicalVa.toLowerCase())
-  if (alreadyLinked) {
-    return { vendorLinkSaved: true, needsSqlSetup: false, vendor_account: canonicalVa, vendor_name: vendorName }
+  return {
+    vendorLinkSaved: saveRes.saved,
+    needsSqlSetup: saveRes.needsSqlSetup,
+    vendor_account: saveRes.vendor_account || null,
+    vendor_name: saveRes.vendor_name || null
   }
-
-  if (!store.dbAvailable) {
-    return { vendorLinkSaved: false, needsSqlSetup: true, vendor_account: canonicalVa, vendor_name: vendorName }
-  }
-
-  const { error: linkErr } = await supabase
-    .from('vendor_links')
-    .upsert({
-      vendor_account: canonicalVa,
-      vendor_name: vendorName || null,
-      ben_id: ben.id,
-      ben_name: ben.name,
-      account_number: ben.account_number,
-      status: 'linked',
-      method: 'manual'
-    }, { onConflict: 'vendor_account,account_number' })
-
-  if (linkErr) {
-    console.warn('Vendor link upsert error:', linkErr)
-    return { vendorLinkSaved: false, needsSqlSetup: true, vendor_account: canonicalVa, vendor_name: vendorName }
-  }
-
-  // Best-effort sync on beneficiaries.vendor_account if column exists
-  try {
-    await supabase.from('beneficiaries').update({ vendor_account: canonicalVa }).eq('id', ben.id)
-  } catch (e) {}
-
-  return { vendorLinkSaved: true, needsSqlSetup: false, vendor_account: canonicalVa, vendor_name: vendorName }
 }
 
 function quotePostgrestList(items) {
@@ -151,7 +121,7 @@ export default async function handler(req, res) {
       }
 
       if (employeeCode.trim()) {
-        query = query.ilike('employee_code', `%${employeeCode.trim()}%`)
+        query = query.ilike('employee_code', `%${employeeCode.trim()}%`).not('employee_code', 'ilike', 'VA:%')
       }
 
       let { data: beneficiaries, count, error } = await query
@@ -206,6 +176,7 @@ export default async function handler(req, res) {
         }
         return {
           ...b,
+          employee_code: stripEmployeeCodeIfVendorTag(b.employee_code),
           vendor_account: vLinks[0]?.vendor_account || b.vendor_account || null,
           vendor_name: vLinks[0]?.vendor_name || null,
           vendor_links: vLinks
@@ -270,6 +241,7 @@ export default async function handler(req, res) {
 
       return res.status(201).json({
         ...savedBen,
+        employee_code: stripEmployeeCodeIfVendorTag(savedBen.employee_code),
         vendor_account: syncRes.vendor_account || savedBen.vendor_account || null,
         vendor_name: syncRes.vendor_name || null,
         _vendorLinkSaved: syncRes.vendorLinkSaved,
@@ -331,6 +303,7 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         ...savedBen,
+        employee_code: stripEmployeeCodeIfVendorTag(savedBen.employee_code),
         vendor_account: syncRes.vendor_account || null,
         vendor_name: syncRes.vendor_name || null,
         _vendorLinkSaved: syncRes.vendorLinkSaved,

@@ -933,7 +933,7 @@ export default function Home() {
           "Name": row.name,
           "Account Number": row.account_number,
           "BIC": row.bank_bic || '',
-          "Employee Code": row.employee_code || '',
+          "Employee Code": String(row.employee_code || '').toUpperCase().startsWith('VA:') ? '' : (row.employee_code || ''),
           "Category": row.category || '',
           "Vendor Account (ERP)": vl?.vendor_account || '',
           "Vendor Name (ERP)": vl?.vendor_name || ''
