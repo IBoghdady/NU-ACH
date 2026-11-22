@@ -1,5 +1,79 @@
 import { supabase } from '../../lib/supabaseClient'
-import { getVendorStore, resolveVendorAccountsFromQuery } from '../../lib/vendorStore'
+import { getVendorStore, resolveVendorAccountsFromQuery, normalizeCode } from '../../lib/vendorStore'
+
+async function syncBeneficiaryVendorLink(store, { ben, vendorAccount, clearWhenEmpty = false }) {
+  const vaRaw = String(vendorAccount || '').trim()
+  if (!vaRaw) {
+    if (clearWhenEmpty && store.dbAvailable && ben) {
+      const activeLinks = [
+        ...(store.linksByBenId.get(Number(ben.id)) || []),
+        ...(store.linksByBankAccount.get(String(ben.account_number || '').trim()) || [])
+      ]
+      const seen = new Set()
+      for (const l of activeLinks) {
+        const key = `${l.vendor_account}::${ben.account_number}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        await supabase
+          .from('vendor_links')
+          .upsert({
+            vendor_account: l.vendor_account,
+            vendor_name: l.vendor_name || null,
+            ben_id: ben.id,
+            ben_name: ben.name,
+            account_number: ben.account_number,
+            status: 'unlinked',
+            method: 'manual'
+          }, { onConflict: 'vendor_account,account_number' })
+      }
+      try {
+        await supabase.from('beneficiaries').update({ vendor_account: null }).eq('id', ben.id)
+      } catch (e) {}
+    }
+    return { vendorLinkSaved: true, needsSqlSetup: false, vendor_account: null, vendor_name: null }
+  }
+
+  const vObj =
+    store.staticVendorByExactLower.get(vaRaw.toLowerCase()) ||
+    store.staticVendorByNorm.get(normalizeCode(vaRaw))
+  const canonicalVa = vObj ? vObj.va : vaRaw
+  const vendorName = vObj ? vObj.n : (ben?.name || '')
+
+  // If this exact vendor_account <-> bank account link already exists in store, no DB write needed
+  const alreadyLinked = (store.linksByBankAccount.get(String(ben?.account_number || '').trim()) || [])
+    .some(l => l.vendor_account.toLowerCase() === canonicalVa.toLowerCase())
+  if (alreadyLinked) {
+    return { vendorLinkSaved: true, needsSqlSetup: false, vendor_account: canonicalVa, vendor_name: vendorName }
+  }
+
+  if (!store.dbAvailable) {
+    return { vendorLinkSaved: false, needsSqlSetup: true, vendor_account: canonicalVa, vendor_name: vendorName }
+  }
+
+  const { error: linkErr } = await supabase
+    .from('vendor_links')
+    .upsert({
+      vendor_account: canonicalVa,
+      vendor_name: vendorName || null,
+      ben_id: ben.id,
+      ben_name: ben.name,
+      account_number: ben.account_number,
+      status: 'linked',
+      method: 'manual'
+    }, { onConflict: 'vendor_account,account_number' })
+
+  if (linkErr) {
+    console.warn('Vendor link upsert error:', linkErr)
+    return { vendorLinkSaved: false, needsSqlSetup: true, vendor_account: canonicalVa, vendor_name: vendorName }
+  }
+
+  // Best-effort sync on beneficiaries.vendor_account if column exists
+  try {
+    await supabase.from('beneficiaries').update({ vendor_account: canonicalVa }).eq('id', ben.id)
+  } catch (e) {}
+
+  return { vendorLinkSaved: true, needsSqlSetup: false, vendor_account: canonicalVa, vendor_name: vendorName }
+}
 
 function quotePostgrestList(items) {
   return items
@@ -155,7 +229,7 @@ export default async function handler(req, res) {
 
   // POST: Create a new beneficiary
   if (req.method === 'POST') {
-    const { name, account_number, bank_bic, category = 'Operational', employee_code, force } = req.body
+    const { name, account_number, bank_bic, category = 'Operational', employee_code, vendor_account, force } = req.body
 
     if (!name || !account_number) {
       return res.status(400).json({ error: 'Name and Account Number are required.' })
@@ -187,7 +261,20 @@ export default async function handler(req, res) {
         throw error
       }
 
-      return res.status(201).json(data[0])
+      const savedBen = data[0]
+      let syncRes = { vendorLinkSaved: true, needsSqlSetup: false, vendor_account: savedBen.vendor_account || null, vendor_name: null }
+      if (vendor_account && String(vendor_account).trim()) {
+        const store = await getVendorStore()
+        syncRes = await syncBeneficiaryVendorLink(store, { ben: savedBen, vendorAccount: vendor_account, clearWhenEmpty: false })
+      }
+
+      return res.status(201).json({
+        ...savedBen,
+        vendor_account: syncRes.vendor_account || savedBen.vendor_account || null,
+        vendor_name: syncRes.vendor_name || null,
+        _vendorLinkSaved: syncRes.vendorLinkSaved,
+        _needsSqlSetup: syncRes.needsSqlSetup
+      })
     } catch (error) {
       console.error('Error creating beneficiary:', error)
       return res.status(500).json({ error: error.message || 'Internal Server Error' })
@@ -196,7 +283,7 @@ export default async function handler(req, res) {
 
   // PUT: Update an existing beneficiary by ID
   if (req.method === 'PUT') {
-    const { id, name, account_number, bank_bic, category = 'Operational', employee_code } = req.body
+    const { id, name, account_number, bank_bic, category = 'Operational', employee_code, vendor_account } = req.body
 
     if (!id) {
       return res.status(400).json({ error: 'Beneficiary ID is required for update.' })
@@ -231,7 +318,24 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: 'Beneficiary not found or update blocked.' })
       }
 
-      return res.status(200).json(data[0])
+      const savedBen = data[0]
+      let syncRes = { vendorLinkSaved: true, needsSqlSetup: false, vendor_account: savedBen.vendor_account || null, vendor_name: null }
+      if (vendor_account !== undefined) {
+        const store = await getVendorStore()
+        syncRes = await syncBeneficiaryVendorLink(store, {
+          ben: savedBen,
+          vendorAccount: vendor_account,
+          clearWhenEmpty: String(vendor_account || '').trim() === ''
+        })
+      }
+
+      return res.status(200).json({
+        ...savedBen,
+        vendor_account: syncRes.vendor_account || null,
+        vendor_name: syncRes.vendor_name || null,
+        _vendorLinkSaved: syncRes.vendorLinkSaved,
+        _needsSqlSetup: syncRes.needsSqlSetup
+      })
     } catch (error) {
       console.error('Error updating beneficiary:', error)
       return res.status(500).json({ error: error.message || 'Internal Server Error' })
