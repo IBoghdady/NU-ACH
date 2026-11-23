@@ -10,6 +10,25 @@ function quotePostgrestList(items) {
     .join(',')
 }
 
+async function computeDirectStats(applyCommonFilters) {
+  const rows = await fetchAllPaginated(() =>
+    applyCommonFilters(
+      supabase.from('transactions').select('transaction_amount, transaction_status', { count: 'exact' })
+    ).order('id', { ascending: true })
+  )
+  let totalVolume = 0
+  let acceptedCount = 0
+  let rejectedCount = 0
+  let returnedCount = 0
+  for (const row of rows) {
+    totalVolume += parseFloat(row.transaction_amount) || 0
+    if (row.transaction_status === 'Accepted') acceptedCount++
+    else if (row.transaction_status === 'Rejected') rejectedCount++
+    else if (row.transaction_status === 'Returned') returnedCount++
+  }
+  return { totalCount: rows.length, totalVolume, acceptedCount, rejectedCount, returnedCount }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
@@ -188,61 +207,46 @@ export default async function handler(req, res) {
 
       query = query
         .order(sortBy, { ascending: sortOrder === 'asc' })
+        .order('id', { ascending: true })
         .range(from, to)
 
-      const { data: txRows, count, error } = await query
+      const { data: txRows, count: rowCount, error } = await query
 
       if (error) {
         throw error
       }
       transactions = txRows || []
-      totalCount = count || 0
+      totalCount = rowCount || 0
     }
 
     // 2. Fetch Aggregated Statistics in Real-Time (when not already computed above)
     const usedVendorFilter = Boolean(vaResolved || searchResolvedAccs.length > 0)
+    const needsDirectStats = usedVendorFilter || (sourceBank && sourceBank !== 'All')
 
-    if (usedVendorFilter && !statsFetched) {
-      // Compute exact stats directly across all matching vendor rows
+    if (needsDirectStats && !statsFetched) {
       try {
-        let statFrom = 0
-        const chunk = 1000
-        let allStatRows = []
-        while (true) {
-          const statQuery = applyCommonFilters(
-            supabase.from('transactions').select('transaction_amount, transaction_status')
-          ).range(statFrom, statFrom + chunk - 1)
-          const { data: sData, error: sErr } = await statQuery
-          if (sErr) throw sErr
-          if (sData && sData.length > 0) {
-            allStatRows = allStatRows.concat(sData)
-            statFrom += chunk
-          }
-          if (!sData || sData.length < chunk) break
-        }
-        totalCount = allStatRows.length
-        for (const row of allStatRows) {
-          totalVolume += parseFloat(row.transaction_amount) || 0
-          if (row.transaction_status === 'Accepted') acceptedCount++
-          else if (row.transaction_status === 'Rejected') rejectedCount++
-          else if (row.transaction_status === 'Returned') returnedCount++
-        }
+        const direct = await computeDirectStats(applyCommonFilters)
+        totalCount = direct.totalCount
+        totalVolume = direct.totalVolume
+        acceptedCount = direct.acceptedCount
+        rejectedCount = direct.rejectedCount
+        returnedCount = direct.returnedCount
         statsFetched = true
       } catch (e) {
-        console.warn('Vendor stats calc fallback:', e)
+        console.warn('Direct stats calc fallback:', e)
       }
     }
 
     if (!statsFetched) {
       try {
+        // Call the 6-parameter Supabase RPC (also handles sourceBank === 'All')
         const { data: statsData, error: statsError } = await supabase.rpc('get_transaction_dashboard_stats', {
           search_term: search.trim(),
           status_filter: status,
           start_date: startDate,
           end_date: endDate,
           comment_filter: comment.trim(),
-          bank_account_filter: bankAccount.trim(),
-          source_bank_filter: sourceBank
+          bank_account_filter: bankAccount.trim()
         })
 
         if (!statsError && statsData) {
@@ -259,15 +263,23 @@ export default async function handler(req, res) {
     }
 
     if (!statsFetched) {
-      totalCount = count || 0
-      transactions.forEach(row => {
-        const amt = parseFloat(row.transaction_amount) || 0
-        totalVolume += amt
-        const stat = row.transaction_status || ''
-        if (stat === 'Accepted') acceptedCount++
-        else if (stat === 'Rejected') rejectedCount++
-        else if (stat === 'Returned') returnedCount++
-      })
+      try {
+        const direct = await computeDirectStats(applyCommonFilters)
+        totalCount = direct.totalCount
+        totalVolume = direct.totalVolume
+        acceptedCount = direct.acceptedCount
+        rejectedCount = direct.rejectedCount
+        returnedCount = direct.returnedCount
+      } catch (fallbackErr) {
+        transactions.forEach(row => {
+          const amt = parseFloat(row.transaction_amount) || 0
+          totalVolume += amt
+          const stat = row.transaction_status || ''
+          if (stat === 'Accepted') acceptedCount++
+          else if (stat === 'Rejected') rejectedCount++
+          else if (stat === 'Returned') returnedCount++
+        })
+      }
     }
 
     // Enrich transactions with linked vendor_account, vendor_name, and comment_category

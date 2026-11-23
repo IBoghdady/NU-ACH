@@ -91,13 +91,25 @@ export async function getVendorStore() {
 
   // Merge manual Vendor Accounts saved directly on beneficiaries (e.g. `VA:<vendor_account>` in employee_code fallback)
   try {
-    const { data: benRows } = await supabase
-      .from('beneficiaries')
-      .select('id, name, account_number, bank_bic, category, employee_code')
-      .not('employee_code', 'is', null)
-      .limit(1000)
+    let benRows = []
+    let bFrom = 0
+    const bLimit = 1000
+    while (true) {
+      const { data: chunkData, error: chunkErr } = await supabase
+        .from('beneficiaries')
+        .select('id, name, account_number, bank_bic, category, employee_code')
+        .not('employee_code', 'is', null)
+        .order('id', { ascending: true })
+        .range(bFrom, bFrom + bLimit - 1)
+      if (chunkErr) break
+      if (chunkData && chunkData.length > 0) {
+        benRows = benRows.concat(chunkData)
+        bFrom += bLimit
+      }
+      if (!chunkData || chunkData.length < bLimit) break
+    }
 
-    if (benRows && benRows.length > 0) {
+    if (benRows.length > 0) {
       for (const b of benRows) {
         const rawCode = String(b.employee_code || '').trim()
         let vas = parseVendorTagFromEmployeeCode(rawCode)
