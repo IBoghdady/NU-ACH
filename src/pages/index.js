@@ -5,7 +5,7 @@ import styles from '../styles/Home.module.css'
 import { supabase } from '../lib/supabaseClient'
 import TransactionReceipt from '../components/TransactionReceipt'
 import VendorLinkingView from '../components/VendorLinkingView'
-import { ANALYTICS_CATEGORIES, CATEGORY_COLOR_MAP, CATEGORY_HINT_MAP, classifyTransactionComment } from '../lib/commentClassifier'
+import { ANALYTICS_CATEGORIES, CATEGORY_COLOR_MAP, CATEGORY_HINT_MAP, classifyTransactionComment, extractPersonCodeFromComment } from '../lib/commentClassifier'
 import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import toast from 'react-hot-toast'
@@ -596,42 +596,56 @@ export default function Home() {
   const [dashboardError, setDashboardError] = useState('')
   const [analyticsData, setAnalyticsData] = useState({ topVendors: [], dailyOutflows: [], categoriesBreakdown: [], totalAnalyzedCount: 0, totalAnalyzedVolume: 0 })
   
+  const analyticsDebounceRef = useRef(null)
+  const lastTxFetchKeyRef = useRef('')
+
   useEffect(() => {
-    if (activeView === 'dashboard') {
-      const fetchAnalytics = async () => {
-        try {
-          const queryParams = new URLSearchParams({
-            search: search,
-            comment: commentFilter,
-            bankAccount: bankAccountFilter,
-            vendorAccount: vendorAccountFilter,
-            commentCategory: commentCategoryFilter,
-            status: status,
-            sourceBank: sourceBank,
-            startDate: startDate,
-            endDate: endDate
+    if (activeView !== 'dashboard') return
+    if (analyticsDebounceRef.current) clearTimeout(analyticsDebounceRef.current)
+
+    const fetchAnalytics = async () => {
+      try {
+        const queryParams = new URLSearchParams({
+          search: search,
+          comment: commentFilter,
+          bankAccount: bankAccountFilter,
+          vendorAccount: vendorAccountFilter,
+          commentCategory: commentCategoryFilter,
+          status: status,
+          sourceBank: sourceBank,
+          startDate: startDate,
+          endDate: endDate
+        })
+        const res = await fetch(`/api/analytics?${queryParams.toString()}`)
+        if (res.ok) {
+          const data = await res.json()
+          setAnalyticsData({ 
+            topVendors: data.topVendors || [], 
+            dailyOutflows: data.dailyOutflows || [],
+            categoriesBreakdown: data.categoriesBreakdown || [],
+            totalAnalyzedCount: data.totalAnalyzedCount || 0,
+            totalAnalyzedVolume: data.totalAnalyzedVolume || 0
           })
-          const res = await fetch(`/api/analytics?${queryParams.toString()}`)
-          if (res.ok) {
-            const data = await res.json()
-            setAnalyticsData({ 
-              topVendors: data.topVendors || [], 
-              dailyOutflows: data.dailyOutflows || [],
-              categoriesBreakdown: data.categoriesBreakdown || [],
-              totalAnalyzedCount: data.totalAnalyzedCount || 0,
-              totalAnalyzedVolume: data.totalAnalyzedVolume || 0
-            })
-          }
-        } catch (e) {
-          console.error(e)
         }
+      } catch (e) {
+        console.error(e)
       }
-      fetchAnalytics()
+    }
+
+    const delay = (search || commentFilter || bankAccountFilter || vendorAccountFilter) ? 450 : 0
+    analyticsDebounceRef.current = setTimeout(fetchAnalytics, delay)
+    return () => {
+      if (analyticsDebounceRef.current) clearTimeout(analyticsDebounceRef.current)
     }
   }, [activeView, search, commentFilter, bankAccountFilter, vendorAccountFilter, commentCategoryFilter, status, sourceBank, startDate, endDate])
 
   // --- Functions ---Dashboard Transactions
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (force = false) => {
+    const queryKey = JSON.stringify([page, status, sourceBank, startDate, endDate, commentCategoryFilter, search, commentFilter, bankAccountFilter, vendorAccountFilter])
+    if (!force && lastTxFetchKeyRef.current === queryKey && transactions.length > 0) {
+      return
+    }
+    lastTxFetchKeyRef.current = queryKey
     setIsLoading(true)
     setDashboardError('')
     try {
@@ -658,13 +672,14 @@ export default function Home() {
       setStats(data.stats || { totalVolume: 0, totalCount: 0, acceptedCount: 0, rejectedCount: 0, returnedCount: 0, successRate: '100.00' })
     } catch (err) {
       console.error(err)
+      lastTxFetchKeyRef.current = ''
       setDashboardError('Could not load transactions. Please verify your Supabase connectivity.')
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Fetch Dashboard Transactions
+  // Immediate fetch for non-text filters or view open
   useEffect(() => {
     if (activeView === 'dashboard' || activeView === 'transactions') {
       fetchDashboardData()
@@ -672,17 +687,22 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, status, sourceBank, startDate, endDate, commentCategoryFilter, activeView])
 
-  // Debounced search trigger for Dashboard
+  // Debounced search trigger for Dashboard/Transactions text inputs
+  const isFirstTxSearchRef = useRef(true)
   useEffect(() => {
+    if (isFirstTxSearchRef.current) {
+      isFirstTxSearchRef.current = false
+      return
+    }
     if (activeView === 'dashboard' || activeView === 'transactions') {
       const delayDebounce = setTimeout(() => {
         fetchDashboardData()
-      }, 500)
+      }, 450)
 
       return () => clearTimeout(delayDebounce)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, commentFilter, bankAccountFilter, vendorAccountFilter, activeView])
+  }, [search, commentFilter, bankAccountFilter, vendorAccountFilter])
 
   // Export to Excel Function (All Dashboard Data)
   const handleExport = async () => {
@@ -837,6 +857,7 @@ export default function Home() {
   const [benSearch, setBenSearch] = useState('')
   const [benEmployeeCodeSearch, setBenEmployeeCodeSearch] = useState('')
   const [benVendorAccountSearch, setBenVendorAccountSearch] = useState('')
+  const [benCategoryFilter, setBenCategoryFilter] = useState('All')
   const [isBenLoading, setIsBenLoading] = useState(false)
   const [showAddBen, setShowAddBen] = useState(false)
   const [selectedBen, setSelectedBen] = useState(null)
@@ -1281,12 +1302,13 @@ export default function Home() {
           return // Skip non-accepted
         }
         
+        const detected = extractPersonCodeFromComment(row.comment)
         const newRow = {
           name: String(name).trim(),
           account_number: acc.trim(),
           bank_bic: row.creditor_party_bic?.toString()?.trim() || null,
-          employee_code: null,
-          category: 'Operational'
+          employee_code: detected.employee_code,
+          category: detected.category
         }
 
         // When importing transactions, only register genuinely new account numbers.
@@ -1303,7 +1325,7 @@ export default function Home() {
       setImportPreviewFilter('all')
       setImportStats({ total: 0, valid: 0, warnings: 0, errors: 0 })
       setActiveView('transactions')
-      fetchDashboardData()
+      fetchDashboardData(true)
 
       // Then insert any newly discovered beneficiaries
       if (newBens.length > 0) {
@@ -1546,7 +1568,7 @@ export default function Home() {
   const fetchBeneficiaries = async () => {
     setIsBenLoading(true)
     try {
-      const res = await fetch(`/api/beneficiaries?limit=150&search=${encodeURIComponent(benSearch)}&employeeCode=${encodeURIComponent(benEmployeeCodeSearch)}&vendorAccount=${encodeURIComponent(benVendorAccountSearch)}`)
+      const res = await fetch(`/api/beneficiaries?limit=150&search=${encodeURIComponent(benSearch)}&employeeCode=${encodeURIComponent(benEmployeeCodeSearch)}&vendorAccount=${encodeURIComponent(benVendorAccountSearch)}&category=${encodeURIComponent(benCategoryFilter)}`)
       if (!res.ok) throw new Error('Could not pull beneficiaries.')
       const data = await res.json()
       setBeneficiaries(data.beneficiaries || [])
@@ -1562,10 +1584,15 @@ export default function Home() {
       fetchBeneficiaries()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeView])
+  }, [activeView, benCategoryFilter])
 
-  // Debounced search for Beneficiaries
+  // Debounced search for Beneficiaries text inputs only
+  const isFirstBenSearchRef = useRef(true)
   useEffect(() => {
+    if (isFirstBenSearchRef.current) {
+      isFirstBenSearchRef.current = false
+      return
+    }
     if (activeView === 'beneficiaries') {
       const delayDebounce = setTimeout(() => {
         fetchBeneficiaries()
@@ -1573,7 +1600,7 @@ export default function Home() {
       return () => clearTimeout(delayDebounce)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [benSearch, benEmployeeCodeSearch, benVendorAccountSearch, activeView])
+  }, [benSearch, benEmployeeCodeSearch, benVendorAccountSearch])
 
   // Handle adding new Beneficiary
   const handleAddBeneficiary = async (e, forceUpdate = false) => {
@@ -2086,7 +2113,7 @@ export default function Home() {
           </button>
           
           <button 
-            onClick={() => { handleNavClick('beneficiaries'); fetchBeneficiaries(); }} 
+            onClick={() => handleNavClick('beneficiaries')} 
             className={`${styles.navLink} ${activeView === 'beneficiaries' ? styles.active : ''}`}
           >
             <span>👥</span> Beneficiaries
@@ -2168,101 +2195,59 @@ export default function Home() {
 
           {/* Shared Filters for Dashboard and Transactions */}
           {(activeView === 'dashboard' || activeView === 'transactions') && (
-            <section className={styles.filterSection} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', marginBottom: '1.5rem' }}>
-              <div className={styles.searchWrapper}>
-                <span className={styles.searchIcon}>🔍</span>
-                <input 
-                  type="text" 
-                  placeholder="Search Creditor, Vendor Acc, Batch..." 
-                  value={search}
-                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                  className={styles.searchInput}
-                />
+            <section className={styles.filterSection} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem', width: '100%' }}>
+                <div className={styles.searchWrapper}>
+                  <span className={styles.searchIcon}>🔍</span>
+                  <input 
+                    type="text" 
+                    placeholder="Search Creditor, Batch, Tx ID..." 
+                    value={search}
+                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                    className={styles.searchInput}
+                  />
+                </div>
+
+                <div className={styles.searchWrapper}>
+                  <span className={styles.searchIcon}>💬</span>
+                  <input 
+                    type="text" 
+                    placeholder="Comment..." 
+                    value={commentFilter}
+                    onChange={(e) => { setCommentFilter(e.target.value); setPage(1); }}
+                    className={styles.searchInput}
+                  />
+                </div>
+
+                <div className={styles.searchWrapper}>
+                  <span className={styles.searchIcon}>🏦</span>
+                  <input 
+                    type="text" 
+                    placeholder="Bank Account..." 
+                    value={bankAccountFilter}
+                    onChange={(e) => { setBankAccountFilter(e.target.value); setPage(1); }}
+                    className={styles.searchInput}
+                  />
+                </div>
+
+                <div className={styles.searchWrapper}>
+                  <span className={styles.searchIcon}>🏷️</span>
+                  <input 
+                    type="text" 
+                    placeholder="Vendor Account..." 
+                    value={vendorAccountFilter}
+                    onChange={(e) => { setVendorAccountFilter(e.target.value); setPage(1); }}
+                    className={styles.searchInput}
+                  />
+                </div>
               </div>
 
-              <div className={styles.searchWrapper}>
-                <span className={styles.searchIcon}>💬</span>
-                <input 
-                  type="text" 
-                  placeholder="Filter by Comment..." 
-                  value={commentFilter}
-                  onChange={(e) => { setCommentFilter(e.target.value); setPage(1); }}
-                  className={styles.searchInput}
-                />
-              </div>
-
-              <div className={styles.searchWrapper}>
-                <span className={styles.searchIcon}>🏦</span>
-                <input 
-                  type="text" 
-                  placeholder="Bank Account..." 
-                  value={bankAccountFilter}
-                  onChange={(e) => { setBankAccountFilter(e.target.value); setPage(1); }}
-                  className={styles.searchInput}
-                />
-              </div>
-
-              <div className={styles.searchWrapper}>
-                <span className={styles.searchIcon}>🏷️</span>
-                <input 
-                  type="text" 
-                  placeholder="Vendor Account..." 
-                  value={vendorAccountFilter}
-                  onChange={(e) => { setVendorAccountFilter(e.target.value); setPage(1); }}
-                  className={styles.searchInput}
-                />
-              </div>
-
-              <div>
-                <select 
-                  value={status} 
-                  onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-                  className={styles.selectInput}
-                >
-                  <option value="All">All Statuses</option>
-                  <option value="Accepted">Accepted / Settled</option>
-                  <option value="Rejected">Rejected</option>
-                  <option value="Returned">Returned</option>
-                </select>
-              </div>
-
-              <div>
-                <input 
-                  type="date" 
-                  value={startDate} 
-                  onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
-                  className={styles.dateInput}
-                  title="Start Date"
-                />
-              </div>
-
-              <div>
-                <input 
-                  type="date" 
-                  value={endDate} 
-                  onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
-                  className={styles.dateInput}
-                  title="End Date"
-                />
-              </div>
-
-              <div>
-                <select 
-                  value={sourceBank} 
-                  onChange={(e) => { setSourceBank(e.target.value); setPage(1); }}
-                  className={styles.selectInput}
-                >
-                  <option value="All">All Banks</option>
-                  <option value="CIB">CIB</option>
-                  <option value="Banque Misr">Banque Misr</option>
-                </select>
-              </div>
-
-              <div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', width: '100%', alignItems: 'center' }}>
                 <select 
                   value={commentCategoryFilter} 
                   onChange={(e) => { setCommentCategoryFilter(e.target.value); setPage(1); }}
                   className={styles.selectInput}
+                  style={{ flex: '1.4', minWidth: '210px' }}
                   title="Filter by Comment Expense Type"
                 >
                   <option value="All">All Expense Types (Comment)</option>
@@ -2270,6 +2255,69 @@ export default function Home() {
                     <option key={cat.name} value={cat.name}>{cat.name}</option>
                   ))}
                 </select>
+
+                <select 
+                  value={status} 
+                  onChange={(e) => { setStatus(e.target.value); setPage(1); }}
+                  className={styles.selectInput}
+                  style={{ flex: '1', minWidth: '150px' }}
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Accepted">Accepted / Settled</option>
+                  <option value="Rejected">Rejected</option>
+                  <option value="Returned">Returned</option>
+                </select>
+
+                <select 
+                  value={sourceBank} 
+                  onChange={(e) => { setSourceBank(e.target.value); setPage(1); }}
+                  className={styles.selectInput}
+                  style={{ flex: '0.8', minWidth: '130px' }}
+                >
+                  <option value="All">All Banks</option>
+                  <option value="CIB">CIB</option>
+                  <option value="Banque Misr">Banque Misr</option>
+                </select>
+
+                <input 
+                  type="date" 
+                  value={startDate} 
+                  onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+                  className={styles.dateInput}
+                  style={{ width: 'auto', minWidth: '145px' }}
+                  title="Start Date"
+                />
+
+                <input 
+                  type="date" 
+                  value={endDate} 
+                  onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+                  className={styles.dateInput}
+                  style={{ width: 'auto', minWidth: '145px' }}
+                  title="End Date"
+                />
+
+                {(search || commentFilter || bankAccountFilter || vendorAccountFilter || status !== 'All' || sourceBank !== 'All' || commentCategoryFilter !== 'All' || startDate || endDate) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch('')
+                      setCommentFilter('')
+                      setBankAccountFilter('')
+                      setVendorAccountFilter('')
+                      setStatus('All')
+                      setSourceBank('All')
+                      setCommentCategoryFilter('All')
+                      setStartDate('')
+                      setEndDate('')
+                      setPage(1)
+                    }}
+                    className={styles.copyBtn}
+                    style={{ padding: '0.72rem 1rem', color: '#f87171', borderColor: 'rgba(239,68,68,0.35)', whiteSpace: 'nowrap' }}
+                  >
+                    ✕ Reset Filters
+                  </button>
+                )}
               </div>
             </section>
           )}
@@ -2896,12 +2944,12 @@ export default function Home() {
               )}
 
               {/* Search Bar for Beneficiaries */}
-              <section className={styles.filterSection} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+              <section className={styles.filterSection} style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr' }}>
                 <div className={styles.searchWrapper}>
                   <span className={styles.searchIcon}>🔍</span>
                   <input 
                     type="text" 
-                    placeholder="Search Beneficiary by name, bank acc, or vendor acc..." 
+                    placeholder="Search by name, bank acc, or vendor acc..." 
                     value={benSearch}
                     onChange={(e) => setBenSearch(e.target.value)}
                     className={styles.searchInput}
@@ -2926,6 +2974,19 @@ export default function Home() {
                     onChange={(e) => setBenVendorAccountSearch(e.target.value)}
                     className={styles.searchInput}
                   />
+                </div>
+                <div>
+                  <select
+                    value={benCategoryFilter}
+                    onChange={(e) => setBenCategoryFilter(e.target.value)}
+                    className={styles.selectInput}
+                  >
+                    <option value="All">All Categories</option>
+                    <option value="Staff">Staff &amp; Employees</option>
+                    <option value="Students">Students</option>
+                    <option value="Vendor">Vendor Account</option>
+                    <option value="Operational">Companies / Operational</option>
+                  </select>
                 </div>
               </section>
 
@@ -2979,20 +3040,18 @@ export default function Home() {
                         <div className={styles.benValue}>{ben.account_number || 'N/A'}</div>
                         {ben.employee_code && (
                           <>
-                            <div className={styles.benLabel}>Employee / Student Code</div>
+                            <div className={styles.benLabel}>{ben.category === 'Students' ? 'Student ID' : 'Employee ID'}</div>
                             <div className={styles.benValue} style={{ color: '#6366f1', fontWeight: '700' }}>#{ben.employee_code}</div>
                           </>
                         )}
-                        <div className={styles.benLabel}>Vendor Account (ERP)</div>
-                        {ben.vendor_account ? (
-                          <div className={styles.benValue} style={{ color: '#10b981', fontWeight: '700', fontFamily: 'monospace' }}>
-                            🏷️ {ben.vendor_account}
-                            {ben.vendor_links?.length > 1 ? ` (+${ben.vendor_links.length - 1})` : ''}
-                          </div>
-                        ) : (
-                          <div className={styles.benValue} style={{ color: '#f59e0b', fontSize: '0.8rem' }}>
-                            ⚠️ Unlinked in ERP
-                          </div>
+                        {ben.vendor_account && (
+                          <>
+                            <div className={styles.benLabel}>Vendor Account (ERP)</div>
+                            <div className={styles.benValue} style={{ color: '#10b981', fontWeight: '700', fontFamily: 'monospace' }}>
+                              🏷️ {ben.vendor_account}
+                              {ben.vendor_links?.length > 1 ? ` (+${ben.vendor_links.length - 1})` : ''}
+                            </div>
+                          </>
                         )}
                         <div className={styles.benLabel}>BIC / Routing</div>
                         <div className={styles.benValue} style={{ marginBottom: '0' }}>
@@ -3370,7 +3429,7 @@ export default function Home() {
 
               {selectedBen.employee_code && (
                 <>
-                  <div className={styles.benLabel}>Employee Code</div>
+                  <div className={styles.benLabel}>{selectedBen.category === 'Students' ? 'Student ID' : 'Employee Code'}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
                     <span className={styles.benValue} style={{ fontSize: '1rem', color: '#6366f1', marginBottom: 0, fontWeight: '700' }}>
                       #{selectedBen.employee_code}
@@ -3385,65 +3444,69 @@ export default function Home() {
                 </>
               )}
 
-              <div className={styles.benLabel}>ERP Vendor Account</div>
-              {selectedBen.vendor_account ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '0.75rem' }}>
-                  {(selectedBen.vendor_links && selectedBen.vendor_links.length > 0
-                    ? selectedBen.vendor_links
-                    : [{ vendor_account: selectedBen.vendor_account, vendor_name: selectedBen.vendor_name }]
-                  ).map((vl) => (
-                    <div key={vl.vendor_account} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <div>
-                        <span className={styles.benValue} style={{ fontSize: '0.95rem', color: '#10b981', marginBottom: 0, fontWeight: '700', fontFamily: 'monospace' }}>
-                          🏷️ {vl.vendor_account}
-                        </span>
-                        {vl.vendor_name && (
-                          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                            {vl.vendor_name}{vl.vendor_hold && vl.vendor_hold !== 'No' ? ` (${vl.vendor_hold} Hold)` : ''}
+              {(selectedBen.vendor_account || !['Staff', 'Satff', 'Students'].includes(selectedBen.category)) && (
+                <>
+                  <div className={styles.benLabel}>ERP Vendor Account</div>
+                  {selectedBen.vendor_account ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '0.75rem' }}>
+                      {(selectedBen.vendor_links && selectedBen.vendor_links.length > 0
+                        ? selectedBen.vendor_links
+                        : [{ vendor_account: selectedBen.vendor_account, vendor_name: selectedBen.vendor_name }]
+                      ).map((vl) => (
+                        <div key={vl.vendor_account} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <div>
+                            <span className={styles.benValue} style={{ fontSize: '0.95rem', color: '#10b981', marginBottom: 0, fontWeight: '700', fontFamily: 'monospace' }}>
+                              🏷️ {vl.vendor_account}
+                            </span>
+                            {vl.vendor_name && (
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                {vl.vendor_name}{vl.vendor_hold && vl.vendor_hold !== 'No' ? ` (${vl.vendor_hold} Hold)` : ''}
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', gap: '0.35rem' }}>
-                        <button
-                          onClick={() => copyToClipboard(vl.vendor_account, `va_${vl.vendor_account}`)}
-                          className={styles.copyBtn}
-                        >
-                          {copiedKey === `va_${vl.vendor_account}` ? '✓ Copied' : '📋 Copy'}
-                        </button>
-                        <button
-                          onClick={() => {
-                            const va = vl.vendor_account
-                            setSelectedBen(null)
-                            setIsEditingBen(false)
-                            setVendorLookupPrefill(va)
-                            handleNavClick('vendors')
-                          }}
-                          className={styles.copyBtn}
-                          style={{ color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.3)' }}
-                        >
-                          🔎 View Vendor
-                        </button>
-                      </div>
+                          <div style={{ display: 'flex', gap: '0.35rem' }}>
+                            <button
+                              onClick={() => copyToClipboard(vl.vendor_account, `va_${vl.vendor_account}`)}
+                              className={styles.copyBtn}
+                            >
+                              {copiedKey === `va_${vl.vendor_account}` ? '✓ Copied' : '📋 Copy'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                const va = vl.vendor_account
+                                setSelectedBen(null)
+                                setIsEditingBen(false)
+                                setVendorLookupPrefill(va)
+                                handleNavClick('vendors')
+                              }}
+                              className={styles.copyBtn}
+                              style={{ color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.3)' }}
+                            >
+                              🔎 View Vendor
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                  <span style={{ fontSize: '0.85rem', color: '#f59e0b' }}>⚠️ Not linked to Vendor.xlsx yet</span>
-                  <button
-                    onClick={() => {
-                      const q = selectedBen.name || selectedBen.account_number
-                      setSelectedBen(null)
-                      setIsEditingBen(false)
-                      setVendorLookupPrefill(q)
-                      handleNavClick('vendors')
-                    }}
-                    className={styles.copyBtn}
-                    style={{ color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.35)' }}
-                  >
-                    🔗 Link Vendor
-                  </button>
-                </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Not linked to Vendor.xlsx yet</span>
+                      <button
+                        onClick={() => {
+                          const q = selectedBen.name || selectedBen.account_number
+                          setSelectedBen(null)
+                          setIsEditingBen(false)
+                          setVendorLookupPrefill(q)
+                          handleNavClick('vendors')
+                        }}
+                        className={styles.copyBtn}
+                        style={{ color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.3)' }}
+                      >
+                        🔗 Link Vendor
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
 
               <div className={styles.benLabel}>Bank Routing / BIC / SWIFT</div>

@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabaseClient'
+import { invalidateAnalyticsCache } from './analytics'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -61,6 +62,8 @@ export default async function handler(req, res) {
     if (error) {
       throw error
     }
+
+    invalidateAnalyticsCache()
 
     return res.status(200).json({
       success: true,

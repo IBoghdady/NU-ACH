@@ -3,6 +3,13 @@ import { getVendorStore, resolveVendorAccountsFromQuery } from '../../lib/vendor
 import { ANALYTICS_CATEGORIES, classifyTransactionComment } from '../../lib/commentClassifier'
 import { fetchAllPaginated } from '../../lib/supabasePagination'
 
+const ANALYTICS_TTL_MS = 120 * 1000
+const _analyticsCache = new Map()
+
+export function invalidateAnalyticsCache() {
+  _analyticsCache.clear()
+}
+
 function quotePostgrestList(items) {
   return items
     .slice(0, 60)
@@ -16,16 +23,22 @@ export default async function handler(req, res) {
   }
 
   const {
-    search,
-    status,
-    startDate,
-    endDate,
-    comment,
-    bankAccount,
-    vendorAccount,
+    search = '',
+    status = 'All',
+    startDate = '',
+    endDate = '',
+    comment = '',
+    bankAccount = '',
+    vendorAccount = '',
     commentCategory = 'All',
-    sourceBank
+    sourceBank = 'All'
   } = req.query
+
+  const cacheKey = JSON.stringify([search, status, startDate, endDate, comment, bankAccount, vendorAccount, commentCategory, sourceBank])
+  const cached = _analyticsCache.get(cacheKey)
+  if (cached && (Date.now() - cached.at) < ANALYTICS_TTL_MS) {
+    return res.status(200).json(cached.payload)
+  }
 
   try {
     const store = await getVendorStore()
@@ -157,14 +170,22 @@ export default async function handler(req, res) {
       }))
       .sort((a, b) => b.value - a.value)
 
-    return res.status(200).json({
+    const responsePayload = {
       success: true,
       topVendors: top5Vendors,
       dailyOutflows,
       categoriesBreakdown,
       totalAnalyzedCount: txs.length,
       totalAnalyzedVolume: Number(totalAnalyzedVolume.toFixed(2))
-    })
+    }
+
+    if (_analyticsCache.size >= 40) {
+      const oldestKey = _analyticsCache.keys().next().value
+      _analyticsCache.delete(oldestKey)
+    }
+    _analyticsCache.set(cacheKey, { at: Date.now(), payload: responsePayload })
+
+    return res.status(200).json(responsePayload)
   } catch (error) {
     console.error('Analytics Error:', error)
     return res.status(500).json({ error: 'Failed to fetch analytics' })

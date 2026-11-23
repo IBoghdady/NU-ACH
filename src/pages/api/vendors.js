@@ -6,24 +6,30 @@ import {
   removeVendorLink,
   stripEmployeeCodeIfVendorTag
 } from '../../lib/vendorStore'
+import { fetchAllPaginated } from '../../lib/supabasePagination'
+
+const BENS_CACHE_TTL_MS = 45 * 1000
+let _cachedBensList = null
+let _cachedBensAt = 0
+
+export function invalidateVendorsBenCache() {
+  _cachedBensList = null
+  _cachedBensAt = 0
+}
 
 async function fetchAllBeneficiariesFromDB() {
-  let all = []
-  let from = 0
-  const limit = 1000
-  while (true) {
-    const { data, error } = await supabase
-      .from('beneficiaries')
-      .select('id, name, account_number, bank_bic, category, employee_code')
-      .order('id', { ascending: true })
-      .range(from, from + limit - 1)
-    if (error) throw error
-    if (data && data.length > 0) {
-      all = all.concat(data)
-      from += limit
-    }
-    if (!data || data.length < limit) break
+  const now = Date.now()
+  if (_cachedBensList && (now - _cachedBensAt) < BENS_CACHE_TTL_MS) {
+    return _cachedBensList
   }
+  const all = await fetchAllPaginated(() =>
+    supabase
+      .from('beneficiaries')
+      .select('id, name, account_number, bank_bic, category, employee_code', { count: 'exact' })
+      .order('id', { ascending: true })
+  )
+  _cachedBensList = all
+  _cachedBensAt = Date.now()
   return all
 }
 
@@ -491,6 +497,7 @@ export default async function handler(req, res) {
             error: 'Database table "vendor_links" is required to link this record. Please run setup_vendors.sql in Supabase SQL Editor.'
           })
         }
+        invalidateVendorsBenCache()
         return res.status(200).json({ success: true, message: 'Vendor linked successfully.' })
       }
 
@@ -508,6 +515,7 @@ export default async function handler(req, res) {
             error: 'Database table "vendor_links" is required to unlink pre-matched records. Please run setup_vendors.sql in Supabase SQL Editor.'
           })
         }
+        invalidateVendorsBenCache()
         return res.status(200).json({ success: true, message: 'Unlinked successfully.' })
       }
 

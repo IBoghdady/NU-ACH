@@ -1,4 +1,13 @@
 import { supabase } from '../../lib/supabaseClient'
+import { fetchAllPaginated } from '../../lib/supabasePagination'
+import { stripEmployeeCodeIfVendorTag } from '../../lib/vendorStore'
+
+function normalizePersonId(val) {
+  const raw = String(val || '').trim().toLowerCase()
+  if (!raw) return ''
+  const stripped = raw.replace(/^(?:emp|emb|stu|stud)[-\s_:]*/i, '').replace(/^0+(?=\d)/, '')
+  return stripped || raw
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -12,31 +21,32 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Extract all unique employee IDs from the incoming rows
-    const employeeIds = [...new Set(rows.map(r => r.employeeId?.toString().trim()).filter(Boolean))]
+    // Fetch all beneficiaries with employee/student codes (ordered by id ASC so newest active account overrides old ones)
+    const beneficiaries = await fetchAllPaginated(() =>
+      supabase
+        .from('beneficiaries')
+        .select('id, employee_code, name, account_number, bank_bic', { count: 'exact' })
+        .not('employee_code', 'is', null)
+        .not('employee_code', 'ilike', 'VA:%')
+        .order('id', { ascending: true })
+    )
 
-    // Fetch all matching beneficiaries from Supabase in one query
-    const { data: beneficiaries, error } = await supabase
-      .from('beneficiaries')
-      .select('employee_code, name, account_number, bank_bic')
-      .in('employee_code', employeeIds)
-
-    if (error) {
-      throw error
-    }
-
-    // Create a lookup dictionary for extremely fast O(1) mapping
-    const benDict = {}
+    const exactDict = {}
+    const normDict = {}
     beneficiaries.forEach(b => {
-      if (b.employee_code) {
-        benDict[b.employee_code] = b
-      }
+      const code = stripEmployeeCodeIfVendorTag(b.employee_code)
+      if (!code) return
+      exactDict[code.toLowerCase()] = b
+      const norm = normalizePersonId(code)
+      if (norm) normDict[norm] = b
     })
 
     // Map the incoming rows to the strict ACH format
     const processedData = rows.map((row, index) => {
-      const empId = row.employeeId?.toString().trim()
-      const ben = benDict[empId] || {}
+      const empId = row.employeeId?.toString().trim() || ''
+      const lower = empId.toLowerCase()
+      const norm = normalizePersonId(empId)
+      const ben = (lower && exactDict[lower]) || (norm && normDict[norm]) || {}
 
       // Identify missing beneficiaries or missing bank details
       const isMissingDetails = !ben.name || !ben.account_number || !ben.bank_bic

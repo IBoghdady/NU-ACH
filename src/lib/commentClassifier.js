@@ -98,3 +98,37 @@ export function classifyTransactionComment(comment) {
 
   return 'Other / Unclassified'
 }
+
+/**
+ * Extracts Staff Employee ID or Student ID from a transaction Comment for auto-registering new beneficiaries.
+ * @param {string|null|undefined} comment
+ * @returns {{ category: string, employee_code: string|null }}
+ */
+export function extractPersonCodeFromComment(comment) {
+  const raw = String(comment || '').trim()
+  if (!raw) return { category: 'Operational', employee_code: null }
+
+  // Staff / Salaries / Social Insurance ID extraction
+  if (/(?:sal(?:ary|aries)?|\bpayroll\b|مرتب(?:ات)?|رواتب|ت[أا]مينات|مص(?:اريف|روفات)\s*(?:ال)?ت[أا]مين)/i.test(raw)) {
+    const cleanCm = raw
+      .replace(/\bje\s*[-#:]?\s*\d+/gi, ' ')
+      .replace(/\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b/g, ' ')
+    const idMatch = cleanCm.match(/\bID\b\s*[:#-]?\s*(\d{1,6})\b/i) || cleanCm.match(/[-–]\s*(\d{2,6})(?:\s|$|")/)
+    if (idMatch && idMatch[1] && !/^20(1[89]|2[0-9])$/.test(idMatch[1])) {
+      return { category: 'Staff', employee_code: idMatch[1] }
+    }
+  }
+
+  // Student ID extraction (7-9 digit NU student ID)
+  if (classifyTransactionComment(raw) === 'Tuition & Deposit Refunds (Student)') {
+    const stripped = raw
+      .replace(/\b(?:inv|invoice|je|bp|po|p\.o|tender|ref|nu)[-\s#:./]*\d+(?:[-/]\d+)*/gi, ' ')
+      .replace(/\b\d{1,4}[-/.]\d{1,4}(?:[-/.]\d{2,4})?\b/g, ' ')
+    const stuMatch = stripped.match(/\bstu[-_\s]*(\d{4,9})\b/i) || stripped.match(/\b((?:1[4-9]|2[0-9])\d{5,7})\b/)
+    if (stuMatch && stuMatch[1]) {
+      return { category: 'Students', employee_code: stuMatch[1] }
+    }
+  }
+
+  return { category: 'Operational', employee_code: null }
+}

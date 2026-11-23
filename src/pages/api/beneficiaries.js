@@ -4,8 +4,10 @@ import {
   resolveVendorAccountsFromQuery,
   saveVendorLink,
   removeVendorLink,
-  stripEmployeeCodeIfVendorTag
+  stripEmployeeCodeIfVendorTag,
+  invalidateVendorStoreCache
 } from '../../lib/vendorStore'
+import { invalidateVendorsBenCache } from './vendors'
 
 async function syncBeneficiaryVendorLink(store, { ben, vendorAccount, clearWhenEmpty = false }) {
   const vaRaw = String(vendorAccount || '').trim()
@@ -63,7 +65,7 @@ export default async function handler(req, res) {
 
   // GET: Fetch list of beneficiaries
   if (req.method === 'GET') {
-    const { search = '', employeeCode = '', vendorAccount = '', page = 1, limit = 50 } = req.query
+    const { search = '', employeeCode = '', vendorAccount = '', category = 'All', page = 1, limit = 50 } = req.query
     const pageNum = parseInt(page, 10)
     const limitNum = parseInt(limit, 10)
     const from = (pageNum - 1) * limitNum
@@ -122,6 +124,20 @@ export default async function handler(req, res) {
 
       if (employeeCode.trim()) {
         query = query.ilike('employee_code', `%${employeeCode.trim()}%`).not('employee_code', 'ilike', 'VA:%')
+      }
+
+      if (category && category !== 'All') {
+        if (category === 'Staff') {
+          query = query.in('category', ['Staff', 'Satff'])
+        } else if (category === 'Students') {
+          query = query.eq('category', 'Students')
+        } else if (category === 'Vendor') {
+          query = query.eq('category', 'Vendor')
+        } else if (category === 'Operational') {
+          query = query.not('category', 'in', '("Staff","Satff","Students")')
+        } else {
+          query = query.eq('category', category)
+        }
       }
 
       let { data: beneficiaries, count, error } = await query
@@ -238,6 +254,8 @@ export default async function handler(req, res) {
         const store = await getVendorStore()
         syncRes = await syncBeneficiaryVendorLink(store, { ben: savedBen, vendorAccount: vendor_account, clearWhenEmpty: false })
       }
+      invalidateVendorStoreCache()
+      invalidateVendorsBenCache()
 
       return res.status(201).json({
         ...savedBen,
@@ -300,6 +318,8 @@ export default async function handler(req, res) {
           clearWhenEmpty: String(vendor_account || '').trim() === ''
         })
       }
+      invalidateVendorStoreCache()
+      invalidateVendorsBenCache()
 
       return res.status(200).json({
         ...savedBen,

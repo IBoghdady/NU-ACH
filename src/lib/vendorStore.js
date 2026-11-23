@@ -36,11 +36,42 @@ for (const v of vendorsRaw) {
   }
 }
 
+const STORE_CACHE_TTL_MS = 60 * 1000
+let _cachedStore = null
+let _cachedStoreAt = 0
+let _inFlightStore = null
+
+export function invalidateVendorStoreCache() {
+  _cachedStore = null
+  _cachedStoreAt = 0
+  _inFlightStore = null
+}
+
 /**
  * Loads the authoritative merged view of Vendors, Links, and Review Suggestions,
  * combining pre-matched Vendor.xlsx links with any manual overrides stored in Supabase `vendor_links`.
  */
-export async function getVendorStore() {
+export async function getVendorStore(forceRefresh = false) {
+  const now = Date.now()
+  if (!forceRefresh && _cachedStore && (now - _cachedStoreAt) < STORE_CACHE_TTL_MS) {
+    return _cachedStore
+  }
+  if (!forceRefresh && _inFlightStore) {
+    return _inFlightStore
+  }
+
+  _inFlightStore = buildVendorStore()
+  try {
+    const store = await _inFlightStore
+    _cachedStore = store
+    _cachedStoreAt = Date.now()
+    return store
+  } finally {
+    _inFlightStore = null
+  }
+}
+
+async function buildVendorStore() {
   let dbRows = []
   let dbAvailable = true
 
@@ -89,7 +120,7 @@ export async function getVendorStore() {
     })
   }
 
-  // Merge manual Vendor Accounts saved directly on beneficiaries (e.g. `VA:<vendor_account>` in employee_code fallback)
+  // Merge manual Vendor Accounts saved directly on corporate/non-Staff beneficiaries
   try {
     let benRows = []
     let bFrom = 0
@@ -99,6 +130,7 @@ export async function getVendorStore() {
         .from('beneficiaries')
         .select('id, name, account_number, bank_bic, category, employee_code')
         .not('employee_code', 'is', null)
+        .not('category', 'in', '("Staff","Satff","Students")')
         .order('id', { ascending: true })
         .range(bFrom, bFrom + bLimit - 1)
       if (chunkErr) break
@@ -386,6 +418,7 @@ export async function saveVendorLink(store, {
       await (benId ? q.eq('id', Number(benId)) : q.eq('account_number', accTrim))
     } catch (e) {}
 
+    invalidateVendorStoreCache()
     return { saved: true, needsSqlSetup: false, vendor_account: canonicalVa, vendor_name: resolvedVendorName }
   }
 
@@ -418,6 +451,7 @@ export async function saveVendorLink(store, {
         .update({ employee_code: newTag })
         .eq('id', benRow.id)
       if (!updErr) {
+        invalidateVendorStoreCache()
         return { saved: true, needsSqlSetup: false, vendor_account: canonicalVa, vendor_name: resolvedVendorName, usedFallback: true }
       }
     }
@@ -484,6 +518,7 @@ export async function removeVendorLink(store, {
       }
     } catch (e) {}
 
+    invalidateVendorStoreCache()
     return { saved: true, needsSqlSetup: false }
   }
 
@@ -504,7 +539,10 @@ export async function removeVendorLink(store, {
         .from('beneficiaries')
         .update({ employee_code: remaining.length > 0 ? `VA:${remaining.join(',')}` : null })
         .eq('id', row.id)
-      if (!error) return { saved: true, needsSqlSetup: false }
+      if (!error) {
+        invalidateVendorStoreCache()
+        return { saved: true, needsSqlSetup: false }
+      }
     }
   }
 

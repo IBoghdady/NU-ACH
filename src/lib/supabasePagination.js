@@ -18,7 +18,7 @@ export async function fetchAllPaginated(buildQuery) {
     offsets.push(off)
   }
 
-  const CONCURRENCY = 6
+  const CONCURRENCY = 12
   for (let i = 0; i < offsets.length; i += CONCURRENCY) {
     const batch = offsets.slice(i, i + CONCURRENCY)
     const results = await Promise.all(
